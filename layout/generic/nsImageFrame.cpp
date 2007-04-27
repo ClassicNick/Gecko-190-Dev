@@ -557,10 +557,14 @@ nsImageFrame::OnDataAvailable(imgIRequest *aRequest,
     return NS_OK;
   }
   
+  // XXX We really need to round this out, now that we're doing better
+  // image scaling!
+  nsRect r = SourceRectToDest(*aRect);
+
   // handle iconLoads first...
   if (HandleIconLoads(aRequest, PR_FALSE)) {
     // Image changed, invalidate
-    Invalidate(*aRect, PR_FALSE);
+    Invalidate(r, PR_FALSE);
     return NS_OK;
   }
 
@@ -582,7 +586,6 @@ nsImageFrame::OnDataAvailable(imgIRequest *aRequest,
     }
   }
 
-  nsRect r = SourceRectToDest(*aRect);
 #ifdef DEBUG_decode
   printf("Source rect (%d,%d,%d,%d) -> invalidate dest rect (%d,%d,%d,%d)\n",
          aRect->x, aRect->y, aRect->width, aRect->height,
