@@ -1929,6 +1929,9 @@ nsPrintEngine::ReflowPrintObject(nsPrintObject * aPO)
 
   NS_ENSURE_SUCCESS(rv, rv);
 
+  // Process the reflow event InitialReflow posted
+  aPO->mPresShell->FlushPendingNotifications(Flush_OnlyReflow);
+
   nsCOMPtr<nsIPresShell> displayShell;
   aPO->mDocShell->GetPresShell(getter_AddRefs(displayShell));
   // Transfer Selection Ranges to the new Print PresShell
