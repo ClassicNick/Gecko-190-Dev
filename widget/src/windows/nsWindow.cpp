@@ -80,6 +80,11 @@
 #include <windows.h>
 #include <process.h>
 
+#ifndef WINCE
+// mmsystem.h is needed to build with WIN32_LEAN_AND_MEAN
+#include <mmsystem.h>
+#endif
+
 #ifdef WINCE
 #define NS_VK_APP1  0x0201
 #define NS_VK_APP2  0x0202
@@ -1988,6 +1993,10 @@ NS_IMETHODIMP nsWindow::SetSizeMode(PRInt32 aMode) {
                          SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
           if (hwndBelow)
             ::SetForegroundWindow(hwndBelow);
+
+          // Play the minimize sound while we're here, since that is also
+          // forgotten when we use SW_SHOWMINIMIZED.
+          ::PlaySound("Minimize", nsnull, SND_ALIAS | SND_NODEFAULT | SND_ASYNC);
         }
 #endif
         break;
