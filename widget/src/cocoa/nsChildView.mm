@@ -2749,7 +2749,7 @@ static nsEventStatus SendMouseEvent(PRBool isTrusted,
                             sizeof(Point),
                             &mouseLoc);
       
-      SendEventToWindow(theEvent, (WindowRef)[[self window] windowRef]);
+      ::SendEventToEventTarget(theEvent, GetWindowEventTarget((WindowRef)[[self window] windowRef]));
       ReleaseEvent(theEvent);
     }
   }
