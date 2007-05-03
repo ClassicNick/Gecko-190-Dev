@@ -81,7 +81,6 @@ REQUIRES = xpcom \
 CPPSRCS = \
           nsAnnoProtocolHandler.cpp \
           nsAnnotationService.cpp \
-          nsBookmarksHTML.cpp \
           nsFaviconService.cpp \
           nsNavHistory.cpp \
           nsNavHistoryAutoComplete.cpp \
