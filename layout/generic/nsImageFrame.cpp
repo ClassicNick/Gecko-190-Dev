@@ -734,7 +734,7 @@ nsImageFrame::ComputeSize(nsIRenderingContext *aRenderingContext,
   return nsLayoutUtils::ComputeSizeWithIntrinsicDimensions(
                             aRenderingContext, this,
                             nsSize(intrinsicWidth, intrinsicHeight),
-                            aCBSize, aBorder, aPadding);
+                            aCBSize, aMargin, aBorder, aPadding);
 }
 
 nsRect 
