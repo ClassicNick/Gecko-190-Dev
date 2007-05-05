@@ -68,6 +68,8 @@
 #include "nsStyleSet.h"
 #include "imgIRequest.h"
 #include "nsInspectorCSSUtils.h"
+#include "nsLayoutUtils.h"
+#include "nsFrameManager.h"
 
 #if defined(DEBUG_bzbarsky) || defined(DEBUG_caillon)
 #define DEBUG_ComputedDOMStyle
@@ -1493,16 +1495,8 @@ nsComputedDOMStyle::GetLineHeight(nsIDOMCSSValue** aValue)
   NS_ENSURE_TRUE(val, NS_ERROR_OUT_OF_MEMORY);
 
   nscoord lineHeight;
-<<<<<<< HEAD
-  if (GetLineHeightCoord(lineHeight)) {
-    val->SetTwips(lineHeight);
-  } else {
-    SetValueToCoord(val, GetStyleText()->mLineHeight);
-  }
-=======
   GetLineHeightCoord(lineHeight);
-  val->SetAppUnits(lineHeight);
->>>>>>> 9cd2a58... Make computed style handle "normal" for line-height by computing an actualnumeric height.  Bug 371041, r+sr=dbaron
+  val->SetTwips(lineHeight);
 
   return CallQueryInterface(val, aValue);
 }
@@ -2755,11 +2749,24 @@ nsComputedDOMStyle::SetValueToCoord(nsROCSSPrimitiveValue* aValue,
                                                   aTable));
       break;
       
-    case eStyleUnit_Chars:
-      // XXX we need a frame and a rendering context to calculate this, bug 281972, bug 282126.
-      aValue->SetTwips(0);
+    case eStyleUnit_Chars: {
+      // Get a rendering context
+      nsCOMPtr<nsIRenderingContext> cx;
+      nsIFrame* frame = mPresShell->FrameManager()->GetRootFrame();
+      if (frame) {
+        mPresShell->CreateRenderingContext(frame, getter_AddRefs(cx));
+      }
+      if (cx) {
+        nscoord val =
+          nsLayoutUtils::CharsToCoord(aCoord, cx, mStyleContextHolder);
+        aValue->SetTwips(PR_MAX(aMinAppUnits, val));
+      } else {
+        // Oh, well.  Give up.
+        aValue->SetTwips(0);
+      }
       break;
-      
+    }
+
     case eStyleUnit_Null:
       aValue->SetIdent(nsGkAtoms::none);
       break;
