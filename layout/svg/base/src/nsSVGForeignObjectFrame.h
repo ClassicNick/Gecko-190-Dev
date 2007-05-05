@@ -44,6 +44,7 @@
 #include "nsIDOMSVGMatrix.h"
 #include "nsIDOMSVGLength.h"
 #include "nsRegion.h"
+#include "nsIPresShell.h"
 
 typedef nsContainerFrame nsSVGForeignObjectFrameBase;
 
@@ -75,6 +76,12 @@ public:
   }
 
   NS_IMETHOD DidSetStyleContext();
+
+  /**
+   * We need to reflow our decendants whenever style changes requiring reflow
+   * occur on an ancestor. Most SVG doesn't participate in reflow, but we can
+   * use MarkIntrinsicWidthsDirty to detect when this happens.
+   */
   virtual void MarkIntrinsicWidthsDirty();
 
   NS_IMETHOD Reflow(nsPresContext*           aPresContext,
@@ -133,7 +140,7 @@ public:
 protected:
   // implementation helpers:
   void DoReflow();
-  void PostChildDirty();
+  void RequestReflow(nsIPresShell::IntrinsicDirty aType);
   void UpdateGraphic();
   float GetPxPerTwips();
   float GetTwipsPerPx();
