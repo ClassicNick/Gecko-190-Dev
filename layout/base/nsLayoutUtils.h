@@ -623,30 +623,6 @@ public:
    * going away, so this is a cleaner definition.
    */
   static nsIFrame* GetClosestLayer(nsIFrame* aFrame);
-<<<<<<< HEAD
-=======
-
-  /**
-   * Draw a single image.
-   *   @param aImage            The image.
-   *   @param aRenderingContext Where to draw the image, set up with an
-   *                            appropriate scale and transform for drawing in
-   *                            app units (aDestRect).
-   *   @param aDestRect         Where to draw the image (app units).
-   *   @param aDirtyRect        Draw only within this region (rounded to the
-   *                            nearest pixel); the intersection of
-   *                            invalidation and clipping.
-   *   @param aSourceRect       If null, draw the entire image so it fits in
-   *                            aDestRect.  If non-null, the subregion of the
-   *                            image that should be drawn (in app units, such
-   *                            that converting it to CSS pixels yields image
-   *                            pixels).
-   */
-  static nsresult DrawImage(nsIRenderingContext* aRenderingContext,
-                            imgIContainer* aImage,
-                            const nsRect& aDestRect,
-                            const nsRect& aDirtyRect,
-                            const nsRect* aSourceRect = nsnull);
 
   /**
    * Set the font on aRC based on the style in aSC
@@ -663,7 +639,6 @@ public:
   static nscoord CharsToCoord(const nsStyleCoord& aStyle,
                               nsIRenderingContext* aRenderingContext,
                               nsStyleContext* aStyleContext);
->>>>>>> 073d7a7... Make computed style handle eStyleUnit_Chars.  Bug 371043, r+sr=dbaron
 };
 
 #endif // nsLayoutUtils_h__
