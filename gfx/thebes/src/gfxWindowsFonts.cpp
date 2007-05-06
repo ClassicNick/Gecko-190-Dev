@@ -557,8 +557,10 @@ gfxWindowsFontGroup::MakeTextRun(const PRUnichar *aString, PRUint32 aLength,
     //    NS_ASSERTION(!(aParams->mFlags & TEXT_NEED_BOUNDING_BOX),
     //                 "Glyph extents not yet supported");
 
-    NS_ASSERTION(mFlags & gfxTextRunFactory::TEXT_ABSOLUTE_SPACING,
-                 "Can't handle relative spacing");
+    gfxTextRun *textRun = new gfxTextRun(aParams, aLength);
+    if (!textRun)
+        return nsnull;
+    NS_ASSERTION(aParams->mContext, "MakeTextRun called without a gfxContext");
 
     nsAutoTArray<PropertyProvider::Spacing,200> spacing;
     spacing.AppendElements(mLength);
@@ -610,6 +612,7 @@ gfxWindowsFontGroup::MakeTextRun(const PRUint8 *aString, PRUint32 aLength,
     gfxTextRun *textRun = new gfxTextRun(aParams, aLength);
     if (!textRun)
         return nsnull;
+    NS_ASSERTION(aParams->mContext, "MakeTextRun called without a gfxContext");
 
 #ifdef FORCE_UNISCRIBE
     const PRBool isComplex = PR_TRUE;
