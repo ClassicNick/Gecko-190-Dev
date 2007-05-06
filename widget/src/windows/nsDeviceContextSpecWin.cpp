@@ -988,7 +988,7 @@ nsPrinterEnumeratorWin::GetPrinterNameList(nsIStringEnumerator **aPrinterNameLis
     printers->AppendString(newName);
   }
 
-  return NS_NewAdoptingStringEnumerator(aPrinterNameList, array);
+  return NS_NewAdoptingStringEnumerator(aPrinterNameList, printers);
 }
 
 //----------------------------------------------------------------------------------
