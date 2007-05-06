@@ -323,9 +323,8 @@ nsListBoxBodyFrame::AttributeChanged(PRInt32 aNameSpaceID,
       value.AppendInt(rowHeight*count);
       mContent->SetAttr(kNameSpaceID_None, nsGkAtoms::minheight, value, PR_FALSE);
 
-      AddStateBits(NS_FRAME_IS_DIRTY);
       PresContext()->PresShell()->
-        FrameNeedsReflow(this, nsIPresShell::eStyleChange);
+        FrameNeedsReflow(this, nsIPresShell::eStyleChange, NS_FRAME_IS_DIRTY);
     }
   }
   else
@@ -508,9 +507,8 @@ nsListBoxBodyFrame::ReflowFinished()
   // if the row height changed then mark everything as a style change. 
   // That will dirty the entire listbox
   if (mRowHeightWasSet) {
-    AddStateBits(NS_FRAME_IS_DIRTY);
     PresContext()->PresShell()->
-      FrameNeedsReflow(this, nsIPresShell::eStyleChange);
+      FrameNeedsReflow(this, nsIPresShell::eStyleChange, NS_FRAME_IS_DIRTY);
      PRInt32 pos = mCurrentIndex * mRowHeight;
      if (mYPosition != pos) 
        mAdjustScroll = PR_TRUE;
@@ -939,9 +937,8 @@ nsListBoxBodyFrame::InternalPositionChanged(PRBool aUp, PRInt32 aDelta)
   
   mYPosition = mCurrentIndex*mRowHeight;
   mScrolling = PR_TRUE;
-  AddStateBits(NS_FRAME_HAS_DIRTY_CHILDREN);
   PresContext()->PresShell()->
-    FrameNeedsReflow(this, nsIPresShell::eResize);
+    FrameNeedsReflow(this, nsIPresShell::eResize, NS_FRAME_HAS_DIRTY_CHILDREN);
   // Flush calls CreateRows
   // XXXbz there has to be a better way to do this than flushing!
   presContext->PresShell()->FlushPendingNotifications(Flush_OnlyReflow);
@@ -1069,9 +1066,9 @@ nsListBoxBodyFrame::DestroyRows(PRInt32& aRowsToLose)
     mTopFrame = childFrame = nextFrame;
   }
 
-  AddStateBits(NS_FRAME_HAS_DIRTY_CHILDREN);
   PresContext()->PresShell()->
-    FrameNeedsReflow(this, nsIPresShell::eTreeChange);
+    FrameNeedsReflow(this, nsIPresShell::eTreeChange,
+                     NS_FRAME_HAS_DIRTY_CHILDREN);
 }
 
 void
@@ -1092,9 +1089,9 @@ nsListBoxBodyFrame::ReverseDestroyRows(PRInt32& aRowsToLose)
     mBottomFrame = childFrame = prevFrame;
   }
 
-  AddStateBits(NS_FRAME_HAS_DIRTY_CHILDREN);
   PresContext()->PresShell()->
-    FrameNeedsReflow(this, nsIPresShell::eTreeChange);
+    FrameNeedsReflow(this, nsIPresShell::eTreeChange,
+                     NS_FRAME_HAS_DIRTY_CHILDREN);
 }
 
 //
@@ -1251,9 +1248,9 @@ nsListBoxBodyFrame::ContinueReflow(nscoord height)
         currFrame = nextFrame;
       }
 
-      AddStateBits(NS_FRAME_HAS_DIRTY_CHILDREN);
       PresContext()->PresShell()->
-        FrameNeedsReflow(this, nsIPresShell::eTreeChange);
+        FrameNeedsReflow(this, nsIPresShell::eTreeChange,
+                         NS_FRAME_HAS_DIRTY_CHILDREN);
     }
     return PR_FALSE;
   }
@@ -1269,9 +1266,9 @@ nsListBoxBodyFrame::ListBoxAppendFrames(nsIFrame* aFrameList)
   mFrames.AppendFrames(nsnull, aFrameList);
   if (mLayoutManager)
     mLayoutManager->ChildrenAppended(this, state, aFrameList);
-  AddStateBits(NS_FRAME_HAS_DIRTY_CHILDREN);
   PresContext()->PresShell()->
-    FrameNeedsReflow(this, nsIPresShell::eTreeChange);
+    FrameNeedsReflow(this, nsIPresShell::eTreeChange,
+                     NS_FRAME_HAS_DIRTY_CHILDREN);
   
   return NS_OK;
 }
@@ -1284,9 +1281,9 @@ nsListBoxBodyFrame::ListBoxInsertFrames(nsIFrame* aPrevFrame, nsIFrame* aFrameLi
   mFrames.InsertFrames(nsnull, aPrevFrame, aFrameList);
   if (mLayoutManager)
     mLayoutManager->ChildrenInserted(this, state, aPrevFrame, aFrameList);
-  AddStateBits(NS_FRAME_HAS_DIRTY_CHILDREN);
   PresContext()->PresShell()->
-    FrameNeedsReflow(this, nsIPresShell::eTreeChange);
+    FrameNeedsReflow(this, nsIPresShell::eTreeChange,
+                     NS_FRAME_HAS_DIRTY_CHILDREN);
 
   return NS_OK;
 }
@@ -1326,9 +1323,9 @@ nsListBoxBodyFrame::OnContentInserted(nsPresContext* aPresContext, nsIContent* a
   }
   
   CreateRows();
-  AddStateBits(NS_FRAME_HAS_DIRTY_CHILDREN);
   PresContext()->PresShell()->
-    FrameNeedsReflow(this, nsIPresShell::eTreeChange);
+    FrameNeedsReflow(this, nsIPresShell::eTreeChange,
+                     NS_FRAME_HAS_DIRTY_CHILDREN);
 }
 
 // 
@@ -1399,9 +1396,9 @@ nsListBoxBodyFrame::OnContentRemoved(nsPresContext* aPresContext, nsIFrame* aChi
     RemoveChildFrame(state, aChildFrame);
   }
 
-  AddStateBits(NS_FRAME_HAS_DIRTY_CHILDREN);
   PresContext()->PresShell()->
-    FrameNeedsReflow(this, nsIPresShell::eTreeChange);
+    FrameNeedsReflow(this, nsIPresShell::eTreeChange,
+                     NS_FRAME_HAS_DIRTY_CHILDREN);
 }
 
 void

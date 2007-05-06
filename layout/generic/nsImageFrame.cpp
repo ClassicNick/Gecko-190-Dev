@@ -529,12 +529,10 @@ nsImageFrame::OnStartContainer(imgIRequest *aRequest, imgIContainer *aImage)
   // already gotten the initial reflow
   if (!(mState & IMAGE_SIZECONSTRAINED) && (mState & IMAGE_GOTINITIALREFLOW)) { 
     nsIPresShell *presShell = presContext->GetPresShell();
-    NS_ASSERTION(mParent, "No parent to pass the reflow request up to.");
     NS_ASSERTION(presShell, "No PresShell.");
-    if (mParent && presShell) { 
-      AddStateBits(NS_FRAME_IS_DIRTY);
-      presShell->FrameNeedsReflow(NS_STATIC_CAST(nsIFrame*, this),
-                                  nsIPresShell::eStyleChange);
+    if (presShell) { 
+      presShell->FrameNeedsReflow(this, nsIPresShell::eStyleChange,
+                                  NS_FRAME_IS_DIRTY);
     }
   }
 
@@ -637,11 +635,9 @@ nsImageFrame::OnStopDecode(imgIRequest *aRequest,
 
     if (mState & IMAGE_GOTINITIALREFLOW) { // do nothing if we haven't gotten the initial reflow yet
       if (!(mState & IMAGE_SIZECONSTRAINED) && intrinsicSizeChanged) {
-        NS_ASSERTION(mParent, "No parent to pass the reflow request up to.");
-        if (mParent && presShell) { 
-          AddStateBits(NS_FRAME_IS_DIRTY);
-          presShell->FrameNeedsReflow(NS_STATIC_CAST(nsIFrame*, this),
-                                      nsIPresShell::eStyleChange);
+        if (presShell) { 
+          presShell->FrameNeedsReflow(this, nsIPresShell::eStyleChange,
+                                      NS_FRAME_IS_DIRTY);
         }
       } else {
         nsSize s = GetSize();
@@ -1662,10 +1658,9 @@ nsImageFrame::AttributeChanged(PRInt32 aNameSpaceID,
   }
   if (nsGkAtoms::alt == aAttribute)
   {
-    AddStateBits(NS_FRAME_IS_DIRTY);
-    PresContext()->PresShell()->FrameNeedsReflow(
-                                       NS_STATIC_CAST(nsIFrame*, this),
-                                       nsIPresShell::eStyleChange);
+    PresContext()->PresShell()->FrameNeedsReflow(this,
+                                                 nsIPresShell::eStyleChange,
+                                                 NS_FRAME_IS_DIRTY);
   }
 
   return NS_OK;

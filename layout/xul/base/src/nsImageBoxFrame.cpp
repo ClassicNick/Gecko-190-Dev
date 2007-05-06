@@ -172,9 +172,8 @@ nsImageBoxFrame::AttributeChanged(PRInt32 aNameSpaceID,
 
   if (aAttribute == nsGkAtoms::src) {
     UpdateImage();
-    AddStateBits(NS_FRAME_IS_DIRTY);
     PresContext()->PresShell()->
-      FrameNeedsReflow(this, nsIPresShell::eStyleChange);
+      FrameNeedsReflow(this, nsIPresShell::eStyleChange, NS_FRAME_IS_DIRTY);
   }
   else if (aAttribute == nsGkAtoms::validate)
     UpdateLoadFlags();
@@ -531,9 +530,8 @@ NS_IMETHODIMP nsImageBoxFrame::OnStartContainer(imgIRequest *request,
   mIntrinsicSize.SizeTo(NSIntPixelsToTwips(w, p2t), NSIntPixelsToTwips(h, p2t));
 
   if (!(GetStateBits() & NS_FRAME_FIRST_REFLOW)) {
-    AddStateBits(NS_FRAME_IS_DIRTY);
     PresContext()->PresShell()->
-      FrameNeedsReflow(this, nsIPresShell::eStyleChange);
+      FrameNeedsReflow(this, nsIPresShell::eStyleChange, NS_FRAME_IS_DIRTY);
   }
 
   return NS_OK;
@@ -558,9 +556,8 @@ NS_IMETHODIMP nsImageBoxFrame::OnStopDecode(imgIRequest *request,
   else {
     // Fire an onerror DOM event.
     mIntrinsicSize.SizeTo(0, 0);
-    AddStateBits(NS_FRAME_IS_DIRTY);
     PresContext()->PresShell()->
-      FrameNeedsReflow(this, nsIPresShell::eStyleChange);
+      FrameNeedsReflow(this, nsIPresShell::eStyleChange, NS_FRAME_IS_DIRTY);
     FireImageDOMEvent(mContent, NS_LOAD_ERROR);
   }
 

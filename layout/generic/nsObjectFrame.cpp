@@ -765,9 +765,8 @@ nsObjectFrame::InstantiatePlugin(nsIPluginHost* aPluginHost,
 
   // XXX having to do this sucks. it'd be better to move the code from DidReflow
   // to FixupWindow or something.
-  AddStateBits(NS_FRAME_IS_DIRTY);
   PresContext()->GetPresShell()->
-    FrameNeedsReflow(this, nsIPresShell::eStyleChange);
+    FrameNeedsReflow(this, nsIPresShell::eStyleChange, NS_FRAME_IS_DIRTY);
   return rv;
 }
 
@@ -1337,7 +1336,7 @@ nsObjectFrame::Instantiate(nsIChannel* aChannel, nsIStreamListener** aStreamList
   // XXX having to do this sucks. it'd be better to move the code from DidReflow
   // to FixupWindow.
   PresContext()->GetPresShell()->
-    FrameNeedsReflow(this, nsIPresShell::eStyleChange);
+    FrameNeedsReflow(this, nsIPresShell::eStyleChange, NS_FRAME_IS_DIRTY);
   return rv;
 }
 
