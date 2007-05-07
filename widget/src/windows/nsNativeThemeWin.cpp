@@ -280,6 +280,7 @@ nsNativeThemeWin::GetTheme(PRUint8 aWidgetType)
       return mButtonTheme;
     }
     case NS_THEME_TEXTFIELD:
+    case NS_THEME_TEXTFIELD_MULTILINE:
     case NS_THEME_DROPDOWN: {
       if (!mTextFieldTheme)
         mTextFieldTheme = openTheme(NULL, L"Edit");
@@ -468,6 +469,7 @@ nsNativeThemeWin::GetThemePartAndState(nsIFrame* aFrame, PRUint8 aWidgetType,
       return NS_OK;
     }
     case NS_THEME_TEXTFIELD:
+    case NS_THEME_TEXTFIELD_MULTILINE:
     case NS_THEME_DROPDOWN: {
       aPart = TFP_TEXTFIELD;
       if (!aFrame) {
@@ -1062,7 +1064,7 @@ nsNativeThemeWin::GetWidgetBorder(nsIDeviceContext* aContext,
     // Remove the left edge, since we won't be drawing it.
     aResult->left = 0;
 
-  if (aFrame && aWidgetType == NS_THEME_TEXTFIELD) {
+  if (aFrame && (aWidgetType == NS_THEME_TEXTFIELD || aWidgetType == NS_THEME_TEXTFIELD_MULTILINE)) {
     nsIContent* content = aFrame->GetContent();
     if (content && content->IsNodeOfType(nsINode::eHTML)) {
       // We need to pad textfields by 1 pixel, since the caret will draw
@@ -1325,6 +1327,7 @@ nsNativeThemeWin::ClassicThemeSupportsWidget(nsPresContext* aPresContext,
   switch (aWidgetType) {
     case NS_THEME_BUTTON:
     case NS_THEME_TEXTFIELD:
+    case NS_THEME_TEXTFIELD_MULTILINE:
     case NS_THEME_CHECKBOX:
     case NS_THEME_RADIO:
     case NS_THEME_SCROLLBAR_BUTTON_UP:
@@ -1400,6 +1403,7 @@ nsNativeThemeWin::ClassicGetWidgetBorder(nsIDeviceContext* aContext,
     case NS_THEME_TAB_LEFT_EDGE:
     case NS_THEME_TAB_RIGHT_EDGE:
     case NS_THEME_TEXTFIELD:
+    case NS_THEME_TEXTFIELD_MULTILINE:
       (*aResult).top = (*aResult).left = (*aResult).bottom = (*aResult).right = 2;
       break;
     case NS_THEME_STATUSBAR_PANEL:
@@ -1505,7 +1509,8 @@ nsNativeThemeWin::ClassicGetMinimumWidgetSize(nsIRenderingContext* aContext, nsI
     case NS_THEME_BUTTON:
     case NS_THEME_LISTBOX:
     case NS_THEME_TREEVIEW:
-    case NS_THEME_TEXTFIELD:          
+    case NS_THEME_TEXTFIELD:
+    case NS_THEME_TEXTFIELD_MULTILINE:
     case NS_THEME_DROPDOWN_TEXTFIELD:      
     case NS_THEME_STATUSBAR:
     case NS_THEME_STATUSBAR_PANEL:      
@@ -1686,6 +1691,7 @@ nsresult nsNativeThemeWin::ClassicGetThemePartAndState(nsIFrame* aFrame, PRUint8
     case NS_THEME_LISTBOX:
     case NS_THEME_TREEVIEW:
     case NS_THEME_TEXTFIELD:
+    case NS_THEME_TEXTFIELD_MULTILINE:
     case NS_THEME_DROPDOWN:
     case NS_THEME_DROPDOWN_TEXTFIELD:
     case NS_THEME_SCROLLBAR_THUMB_VERTICAL:
@@ -2075,6 +2081,7 @@ GetNativeRect(tr, widgetRect);
     }
     // Draw controls with 2px 3D inset border
     case NS_THEME_TEXTFIELD:
+    case NS_THEME_TEXTFIELD_MULTILINE:
     case NS_THEME_LISTBOX:
     case NS_THEME_DROPDOWN:
     case NS_THEME_DROPDOWN_TEXTFIELD: {
@@ -2317,6 +2324,7 @@ nsNativeThemeWin::GetWidgetNativeDrawingFlags(PRUint8 aWidgetType)
   switch (aWidgetType) {
     case NS_THEME_BUTTON:
     case NS_THEME_TEXTFIELD:
+    case NS_THEME_TEXTFIELD_MULTILINE:
 
     case NS_THEME_DROPDOWN:
     case NS_THEME_DROPDOWN_TEXTFIELD:
