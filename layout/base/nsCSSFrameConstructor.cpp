@@ -8500,11 +8500,10 @@ nsCSSFrameConstructor::ContentAppended(nsIContent*     aContainer,
   PRBool haveFirstLetterStyle = PR_FALSE, haveFirstLineStyle = PR_FALSE;
   nsIFrame* containingBlock = state.mFloatedItems.containingBlock;
   if (containingBlock) {
-    nsIContent* blockContent = containingBlock->GetContent();
-    nsStyleContext* blockSC = containingBlock->GetStyleContext();
-    HaveSpecialBlockStyle(blockContent, blockSC,
-                          &haveFirstLetterStyle,
-                          &haveFirstLineStyle);
+    haveFirstLetterStyle = HaveFirstLetterStyle(containingBlock);
+    haveFirstLineStyle =
+      HaveFirstLineStyle(containingBlock->GetContent(),
+                         containingBlock->GetStyleContext());
   }
 
   if (haveFirstLetterStyle) {
@@ -9029,11 +9028,10 @@ nsCSSFrameConstructor::ContentInserted(nsIContent*            aContainer,
       (NS_STYLE_DISPLAY_INLINE_BLOCK == parentDisplay->mDisplay)) {
     // Recover the special style flags for the containing block
     if (containingBlock) {
-      blockSC = containingBlock->GetStyleContext();
-      blockContent = containingBlock->GetContent();
-      HaveSpecialBlockStyle(blockContent, blockSC,
-                            &haveFirstLetterStyle,
-                            &haveFirstLineStyle);
+      haveFirstLetterStyle = HaveFirstLetterStyle(containingBlock);
+      haveFirstLineStyle =
+        HaveFirstLineStyle(containingBlock->GetContent(),
+                           containingBlock->GetStyleContext());
     }
 
     if (haveFirstLetterStyle) {
