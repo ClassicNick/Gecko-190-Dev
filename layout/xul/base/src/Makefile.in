@@ -93,6 +93,7 @@ CPPSRCS		= \
 		nsScrollbarButtonFrame.cpp \
 		nsButtonBoxFrame.cpp \
 		nsSliderFrame.cpp \
+		nsNativeScrollbarFrame.cpp \
 		nsRepeatService.cpp \
 		nsXULTooltipListener.cpp \
 		$(NULL)
