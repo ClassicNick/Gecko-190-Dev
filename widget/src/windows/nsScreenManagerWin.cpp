@@ -48,8 +48,24 @@
 #include "nsScreenManagerWin.h"
 #include "nsScreenWin.h"
 
+// needed because there are unicode/ansi versions of this routine
+// and we need to make sure we get the correct one.
+#ifdef UNICODE
+#define GetMonitorInfoQuoted "GetMonitorInfoW"
+#else
+#define GetMonitorInfoQuoted "GetMonitorInfoA"
+#endif
+
+
+#if defined(__MINGW32__) || _MSC_VER >= 1200
+typedef HMONITOR (WINAPI *MonitorFromRectProc)(LPCRECT inRect, DWORD inFlag); 
+typedef BOOL (WINAPI *EnumDisplayMonitorsProc)(HDC, LPCRECT, MONITORENUMPROC, LPARAM);
 
 BOOL CALLBACK CountMonitors ( HMONITOR, HDC, LPRECT, LPARAM ioCount ) ;
+typedef HMONITOR (WINAPI *MonitorFromWindowProc) (HWND hwnd, DWORD dwFlags);
+#else
+typedef void* HMONITOR;
+#endif
 
 
 class ScreenListItem
@@ -64,9 +80,23 @@ public:
 
 
 nsScreenManagerWin :: nsScreenManagerWin ( )
-  : mNumberOfScreens(0)
+  : mHasMultiMonitorAPIs(PR_FALSE), mNumberOfScreens(0),
+    mGetMonitorInfoProc(nsnull), mMonitorFromRectProc(nsnull),
+    mEnumDisplayMonitorsProc(nsnull)
 {
-  // nothing to do. I guess we could cache a bunch of information
+  // figure out if we can call the multiple monitor APIs that are only
+  // available on Win98/2000.
+  HMODULE lib = GetModuleHandle("user32.dll");
+  if ( lib ) {
+    mGetMonitorInfoProc = GetProcAddress ( lib, GetMonitorInfoQuoted );
+    mMonitorFromRectProc = GetProcAddress ( lib, "MonitorFromRect" );
+	mMonitorFromWindowProc = GetProcAddress ( lib, "MonitorFromWindow" );
+    mEnumDisplayMonitorsProc = GetProcAddress ( lib, "EnumDisplayMonitors" );
+    if ( mGetMonitorInfoProc && mMonitorFromRectProc && mEnumDisplayMonitorsProc )
+      mHasMultiMonitorAPIs = PR_TRUE;
+  }
+
+  // nothing else to do. I guess we could cache a bunch of information
   // here, but we want to ask the device at runtime in case anything
   // has changed.
 }
@@ -138,7 +168,16 @@ nsScreenManagerWin :: ScreenForRect ( PRInt32 inLeft, PRInt32 inTop, PRInt32 inW
 
   RECT globalWindowBounds = { inLeft, inTop, inLeft + inWidth, inTop + inHeight };
 
-  void* genScreen = ::MonitorFromRect( &globalWindowBounds, MONITOR_DEFAULTTOPRIMARY );
+  void* genScreen = nsnull;
+#if defined(__MINGW32__) || _MSC_VER >= 1200
+  if ( mHasMultiMonitorAPIs ) {
+    MonitorFromRectProc proc = (MonitorFromRectProc)mMonitorFromRectProc;
+    HMONITOR screen = (*proc)( &globalWindowBounds, MONITOR_DEFAULTTOPRIMARY );
+    genScreen = screen;
+
+    //XXX find the DC for this screen??
+  }
+#endif
 
   *outScreen = CreateNewScreenObject ( genScreen );    // addrefs
   
@@ -162,6 +201,7 @@ nsScreenManagerWin :: GetPrimaryScreen(nsIScreen** aPrimaryScreen)
 } // GetPrimaryScreen
 
 
+#if defined(__MINGW32__) || _MSC_VER >= 1200
 //
 // CountMonitors
 //
@@ -178,6 +218,7 @@ CountMonitors ( HMONITOR, HDC, LPRECT, LPARAM ioParam )
   return TRUE; // continue the enumeration
 
 } // CountMonitors
+#endif
 
 
 //
@@ -190,13 +231,18 @@ nsScreenManagerWin :: GetNumberOfScreens(PRUint32 *aNumberOfScreens)
 {
   if ( mNumberOfScreens )
     *aNumberOfScreens = mNumberOfScreens;
-  else {
-    PRUint32 count = 0;
-    BOOL result = ::EnumDisplayMonitors(nsnull, nsnull, (MONITORENUMPROC)CountMonitors, (LPARAM)&count);
-    if (!result)
-      return NS_ERROR_FAILURE;
-    *aNumberOfScreens = mNumberOfScreens = count;
-  }
+#if defined(__MINGW32__) || _MSC_VER >= 1200
+  else if ( mHasMultiMonitorAPIs ) {
+      PRUint32 count = 0;
+      EnumDisplayMonitorsProc proc = (EnumDisplayMonitorsProc)mEnumDisplayMonitorsProc;
+      BOOL result = (*proc)(nsnull, nsnull, (MONITORENUMPROC)CountMonitors, (LPARAM)&count);
+      if (!result)
+        return NS_ERROR_FAILURE;
+      *aNumberOfScreens = mNumberOfScreens = count;      
+  } // if there can be > 1 screen
+#endif
+  else
+    *aNumberOfScreens = mNumberOfScreens = 1;
 
   return NS_OK;
   
@@ -205,7 +251,17 @@ nsScreenManagerWin :: GetNumberOfScreens(PRUint32 *aNumberOfScreens)
 NS_IMETHODIMP
 nsScreenManagerWin :: ScreenForNativeWidget(void *aWidget, nsIScreen **outScreen)
 {
-  HMONITOR mon = MonitorFromWindow ((HWND) aWidget, MONITOR_DEFAULTTOPRIMARY);
-  *outScreen = CreateNewScreenObject (mon);
-  return NS_OK;
+#if defined(__MINGW32__) || _MSC_VER >= 1200
+  if (mHasMultiMonitorAPIs) {
+    MonitorFromWindowProc proc = (MonitorFromWindowProc) mMonitorFromWindowProc;
+    HMONITOR mon = proc ((HWND) aWidget, MONITOR_DEFAULTTOPRIMARY);
+    *outScreen = CreateNewScreenObject (mon);
+    return NS_OK;
+  }
+  else {
+    return NS_ERROR_NOT_IMPLEMENTED;
+  }
+#else
+	return NS_ERROR_NOT_IMPLEMENTED;
+#endif
 }

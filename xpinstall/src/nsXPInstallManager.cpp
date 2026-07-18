@@ -36,6 +36,7 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+#include "nsCOMPtr.h"
 #include "nscore.h"
 #include "pratom.h"
 #include "prmem.h"

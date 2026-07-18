@@ -367,7 +367,7 @@ nsSliderFrame::DoLayout(nsBoxLayoutState& aState)
   else if (curpospx > maxpospx)
      curpospx = maxpospx;
 
-  nscoord onePixel = nsPresContext::CSSPixelsToAppUnits(1);
+  nscoord onePixel = aState.PresContext()->IntScaledPixelsToTwips(1);
 
   // get max pos in twips
   nscoord maxpos = (maxpospx - minpospx) * onePixel;
@@ -465,7 +465,7 @@ nsSliderFrame::HandleEvent(nsPresContext* aPresContext,
 
        nscoord pos = isHorizontal ? eventPoint.x : eventPoint.y;
 
-       nscoord onePixel = nsPresContext::CSSPixelsToAppUnits(1);
+       nscoord onePixel = aPresContext->IntScaledPixelsToTwips(1);
 
        nsIFrame* thumbFrame = mFrames.FirstChild();
        if (!thumbFrame) {
@@ -554,7 +554,7 @@ nsSliderFrame::HandleEvent(nsPresContext* aPresContext,
                                                                       this);
     nscoord pos = isHorizontal ? eventPoint.x : eventPoint.y;
 
-    nscoord onePixel = nsPresContext::CSSPixelsToAppUnits(1);
+    nscoord onePixel = aPresContext->IntScaledPixelsToTwips(1);
     nscoord pospx = pos/onePixel;
 
    // adjust so that the middle of the thumb is placed under the click
@@ -685,7 +685,7 @@ nsSliderFrame::CurrentPositionChanged(nsPresContext* aPresContext)
   nscoord pos = reverse ? (maxpospx - curpospx) : (curpospx - minpospx);
 
   // convert to pixels
-  nscoord onePixel = nsPresContext::CSSPixelsToAppUnits(1);
+    nscoord onePixel = aPresContext->IntScaledPixelsToTwips(1);
   if (isHorizontal)
      newThumbRect.x = clientRect.x + nscoord(float(pos * onePixel) * mRatio);
   else
@@ -849,21 +849,21 @@ nsSliderFrame::MouseDown(nsIDOMEvent* aMouseEvent)
 
   PRInt32 clientPosPx;
   nsIntRect screenRect = GetScreenRect();
-  nscoord pos;
   if (isHorizontal) {
     mouseEvent->GetScreenX(&clientPosPx);
-    pos = nsPresContext::CSSPixelsToAppUnits(clientPosPx) - 
-          PresContext()->DevPixelsToAppUnits(screenRect.x);
+    clientPosPx -= screenRect.x;
   } else {
     mouseEvent->GetScreenY(&clientPosPx);
-    pos = nsPresContext::CSSPixelsToAppUnits(clientPosPx) - 
-          PresContext()->DevPixelsToAppUnits(screenRect.y);
+    clientPosPx -= screenRect.y;
   }
+
+  nsPresContext* presContext = PresContext();
+  nscoord pos = presContext->IntScaledPixelsToTwips(clientPosPx);
 
   // If shift click or middle button, first
   // place the middle of the slider thumb under the click
   if (scrollToClick) {
-    nscoord onePixel = nsPresContext::CSSPixelsToAppUnits(1);
+    nscoord onePixel = PresContext()->IntScaledPixelsToTwips(1);
     nscoord pospx = pos/onePixel;
 
     // adjust so that the middle of the thumb is placed under the click

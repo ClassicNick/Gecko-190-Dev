@@ -67,6 +67,7 @@ REQUIRES	= xpcom \
 		  windowwatcher \
 		  webbrowserpersist \
 		  embed_base \
+		  locale \
 		  $(NULL)
 
 ifeq (,$(filter-out WINCE WINNT,$(OS_ARCH)))

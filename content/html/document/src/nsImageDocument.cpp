@@ -450,8 +450,8 @@ nsImageDocument::RestoreImageTo(PRInt32 aX, PRInt32 aY)
     return NS_OK;
 
   nsRect portRect = view->View()->GetBounds();
-  view->ScrollTo(nsPresContext::CSSPixelsToAppUnits(aX/ratio) - portRect.width/2,
-                 nsPresContext::CSSPixelsToAppUnits(aY/ratio) - portRect.height/2,
+  view->ScrollTo(NSToCoordRound((aX/ratio)*context->PixelsToTwips() - portRect.width/2),
+                 NSToCoordRound((aY/ratio)*context->PixelsToTwips() - portRect.height/2),
                  NS_VMREFRESH_IMMEDIATE);
   return NS_OK;
 }
@@ -625,8 +625,10 @@ nsImageDocument::CheckOverflowing(PRBool changeState)
   if (styleContext->GetStylePadding()->GetPadding(m))
     visibleArea.Deflate(m);
 
-  mVisibleWidth = nsPresContext::AppUnitsToIntCSSPixels(visibleArea.width);
-  mVisibleHeight = nsPresContext::AppUnitsToIntCSSPixels(visibleArea.height);
+  float t2p;
+  t2p = context->TwipsToPixels();
+  mVisibleWidth = NSTwipsToIntPixels(visibleArea.width, t2p);
+  mVisibleHeight = NSTwipsToIntPixels(visibleArea.height, t2p);
 
   PRBool imageWasOverflowing = mImageIsOverflowing;
   mImageIsOverflowing =

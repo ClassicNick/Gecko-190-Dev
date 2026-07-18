@@ -39,6 +39,10 @@
 #include "InstallCleanupDefines.h"
 #include <windows.h>
 #include <string.h>
+
+#ifndef CSTR_EQUAL
+#define CSTR_EQUAL 2
+#endif
 //----------------------------------------------------------------------------
 // Native Windows file deletion function
 //----------------------------------------------------------------------------

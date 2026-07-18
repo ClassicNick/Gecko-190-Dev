@@ -40,6 +40,7 @@
 #ifndef nsFileChannel_h__
 #define nsFileChannel_h__
 
+#include "nsCOMPtr.h"
 #include "nsBaseChannel.h"
 #include "nsIFileChannel.h"
 #include "nsIUploadChannel.h"

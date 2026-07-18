@@ -45,11 +45,11 @@
  * Base class for all our document implementations.
  */
 
+#include "nsDocument.h"
 #include "plstr.h"
 
 #include "nsIInterfaceRequestor.h"
 #include "nsIInterfaceRequestorUtils.h"
-#include "nsDocument.h"
 #include "nsUnicharUtils.h"
 #include "nsIPrivateDOMEvent.h"
 #include "nsIEventStateManager.h"

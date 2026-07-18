@@ -231,7 +231,8 @@ public:
    * GetContinuousBCBorderWidth will not overwrite aBorder.left
    * see nsTablePainter about continuous borders
    */
-  void GetContinuousBCBorderWidth(nsMargin& aBorder);
+  void GetContinuousBCBorderWidth(float     aPixelsToTwips,
+                                  nsMargin& aBorder);
   /**
    * Set full border widths before collapsing with cell borders
    * @param aForSide - side to set; only accepts top and bottom

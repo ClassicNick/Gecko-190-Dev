@@ -169,7 +169,7 @@ gfxTextRunCache::GetOrMakeTextRun(gfxContext *aContext, gfxFontGroup *aFontGroup
             // Check that this matches what we wanted. If it doesn't, we leave
             // this cache entry alone and return a fresh, caller-owned textrun
             // below.
-            if (cachedTR->GetAppUnitsPerDevUnit() == aAppUnitsPerDevUnit &&
+            if (cachedTR->GetPixelsToAppUnits() == aDevToApp &&
                 cachedTR->IsRightToLeft() == aIsRTL) {
                 entry->Used();
                 tr = cachedTR;
@@ -232,7 +232,7 @@ gfxTextRunCache::GetOrMakeTextRun(gfxContext *aContext, gfxFontGroup *aFontGroup
             // Check that this matches what we wanted. If it doesn't, we leave
             // this cache entry alone and return a fresh, caller-owned textrun
             // below.
-            if (cachedTR->GetAppUnitsPerDevUnit() == aAppUnitsPerDevUnit &&
+            if (cachedTR->GetPixelsToAppUnits() == aDevToApp &&
                 cachedTR->IsRightToLeft() == aIsRTL) {
                 entry->Used();
                 tr = cachedTR;

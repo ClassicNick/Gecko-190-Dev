@@ -48,22 +48,22 @@ class nsSVGClipPathFrame : public nsSVGClipPathFrameBase
 
   NS_IMETHOD InitSVG();
 
+ public:
   nsSVGClipPathFrame(nsStyleContext* aContext) : nsSVGClipPathFrameBase(aContext) {}
 
- public:
   // nsSVGClipPathFrame methods:
-  nsresult ClipPaint(nsSVGRenderState* aContext,
-                     nsISVGChildFrame* aParent,
-                     nsIDOMSVGMatrix *aMatrix);
+  NS_IMETHOD ClipPaint(nsISVGRendererCanvas* canvas,
+                       nsISVGChildFrame* aParent,
+                       nsCOMPtr<nsIDOMSVGMatrix> aMatrix);
 
-  PRBool ClipHitTest(nsISVGChildFrame* aParent,
-                     nsIDOMSVGMatrix *aMatrix,
-                     float aX, float aY);
+  NS_IMETHOD ClipHitTest(nsISVGChildFrame* aParent,
+                         nsCOMPtr<nsIDOMSVGMatrix> aMatrix,
+                         float aX, float aY, PRBool *aHit);
 
   // Check if this clipPath is made up of more than one geometry object.
   // If so, the clipping API in cairo isn't enough and we need to use
   // mask based clipping.
-  PRBool IsTrivial();
+  NS_IMETHOD IsTrivial(PRBool *aTrivial);
 
   /**
    * Get the "type" of the frame
@@ -98,6 +98,7 @@ class nsSVGClipPathFrame : public nsSVGClipPathFrameBase
   private:
     nsSVGClipPathFrame *mFrame;
   };
+  friend class AutoClipPathReferencer;
 
   nsISVGChildFrame *mClipParent;
   nsCOMPtr<nsIDOMSVGMatrix> mClipParentMatrix;
@@ -109,7 +110,8 @@ class nsSVGClipPathFrame : public nsSVGClipPathFrameBase
   PRPackedBool mInUse;
 };
 
-nsIContent *
-NS_GetSVGClipPathElement(nsIURI *aURI, nsIContent *aContent);
+nsresult
+NS_GetSVGClipPathFrame(nsSVGClipPathFrame **aResult,
+                       nsIURI *aURI, nsIContent *aContent);
 
 #endif

@@ -37,40 +37,34 @@
 #ifndef __NS_SVGFILTERFRAME_H__
 #define __NS_SVGFILTERFRAME_H__
 
+#include "nsISupports.h"
 #include "nsRect.h"
-#include "nsSVGContainerFrame.h"
 
-typedef nsSVGContainerFrame nsSVGFilterFrameBase;
+class nsISVGRendererCanvas;
+class nsISVGChildFrame;
+class nsIURI;
+class nsIContent;
+class nsISVGRendererRegion;
+class nsIFrame;
 
-class nsSVGFilterFrame : public nsSVGFilterFrameBase
-{
-  friend nsIFrame*
-  NS_NewSVGFilterFrame(nsIPresShell* aPresShell, nsIContent* aContent, nsStyleContext* aContext);
+#define NS_ISVGFILTERFRAME_IID \
+{0x482c56ef, 0x9ff9, 0x49ef, {0xa3, 0xa3, 0x64, 0x46, 0x5c, 0xfc, 0xf5, 0x1d}}
 
-protected:
-  NS_IMETHOD InitSVG();
-
+class nsISVGFilterFrame : public nsISupports {
 public:
-  nsSVGFilterFrame(nsStyleContext* aContext) : nsSVGFilterFrameBase(aContext) {}
+  NS_DECLARE_STATIC_IID_ACCESSOR(NS_ISVGFILTERFRAME_IID)
 
-  nsresult FilterPaint(nsSVGRenderState *aContext,
-                       nsISVGChildFrame *aTarget);
-  nsRect GetInvalidationRegion(nsIFrame *aTarget);
+  NS_IMETHOD FilterPaint(nsISVGRendererCanvas *aCanvas,
+                         nsISVGChildFrame *aTarget) = 0;
 
-  /**
-   * Get the "type" of the frame
-   *
-   * @see nsGkAtoms::svgFilterFrame
-   */
-  virtual nsIAtom* GetType() const;
-
-private:
-  // implementation helpers
-  void FilterFailCleanup(nsSVGRenderState *aContext,
-                         nsISVGChildFrame *aTarget);
+  NS_IMETHOD_(nsRect) GetInvalidationRegion(nsIFrame *aTarget) = 0;
 };
 
-nsIContent *
-NS_GetSVGFilterElement(nsIURI *aURI, nsIContent *aContent);
+NS_DEFINE_STATIC_IID_ACCESSOR(nsISVGFilterFrame, NS_ISVGFILTERFRAME_IID)
+
+nsresult
+NS_GetSVGFilterFrame(nsISVGFilterFrame **aResult,
+                     nsIURI *aURI,
+                     nsIContent *aContent);
 
 #endif

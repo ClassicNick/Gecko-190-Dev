@@ -46,6 +46,7 @@
 #define nsStubMutationObserver_h_
 
 #include "nsIMutationObserver.h"
+#include "nsIFrame.h"
 
 /**
  * There are two advantages to inheriting from nsStubMutationObserver

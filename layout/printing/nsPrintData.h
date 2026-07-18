@@ -37,6 +37,9 @@
 #ifndef nsPrintData_h___
 #define nsPrintData_h___
 
+#include "nsCOMPtr.h"
+#include "nsPrintObject.h"
+
 // Interfaces
 #include "nsIDOMWindow.h"
 #include "nsIDeviceContext.h"

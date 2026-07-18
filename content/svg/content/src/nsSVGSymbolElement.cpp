@@ -34,6 +34,7 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+#include "nsCOMPtr.h"
 #include "nsIDOMSVGSymbolElement.h"
 #include "nsSVGStylableElement.h"
 #include "nsSVGAnimatedPreserveAspectRatio.h"

@@ -62,6 +62,7 @@
 
 #include "nsITransport.h"
 #include "nsISocketTransport.h"
+#include "nsIFrame.h"
 
 static NS_DEFINE_CID(kThisImplCID, NS_THIS_DOCLOADER_IMPL_CID);
 

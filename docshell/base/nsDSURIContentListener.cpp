@@ -37,8 +37,8 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-#include "nsDocShell.h"
 #include "nsDSURIContentListener.h"
+#include "nsDocShell.h"
 #include "nsIChannel.h"
 #include "nsServiceManagerUtils.h"
 #include "nsXPIDLString.h"

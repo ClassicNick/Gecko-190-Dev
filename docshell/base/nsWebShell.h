@@ -38,6 +38,7 @@
 #ifndef webshell____h
 #define webshell____h
 
+#include "nsISupportsUtils.h"
 #include "nsError.h"
 #include "nsIWebShellServices.h"
 #include "nsILinkHandler.h"

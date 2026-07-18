@@ -39,6 +39,7 @@
 #ifndef nsSVGDocument_h__
 #define nsSVGDocument_h__
 
+#include "nsCOMPtr.h"
 #include "nsXMLDocument.h"
 #include "nsIDOMSVGDocument.h"
 

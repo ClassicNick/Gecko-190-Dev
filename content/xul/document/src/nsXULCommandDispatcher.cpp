@@ -43,6 +43,7 @@
 
  */
 
+#include "nsCOMPtr.h"
 #include "nsIContent.h"
 #include "nsIFocusController.h"
 #include "nsIControllers.h"

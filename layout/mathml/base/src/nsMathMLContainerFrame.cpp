@@ -647,7 +647,7 @@ nsMathMLContainerFrame::PropagateScriptStyleFor(nsIFrame*       aFrame,
     }
     else {
       // By default scriptminsize=8pt and scriptsizemultiplier=0.71
-      nscoord scriptminsize = aFrame->PresContext()->PointsToAppUnits(NS_MATHML_SCRIPTMINSIZE);
+      nscoord scriptminsize = NSIntPointsToTwips(NS_MATHML_SCRIPTMINSIZE);
       float scriptsizemultiplier = NS_MATHML_SCRIPTSIZEMULTIPLIER;
 #if 0
        // XXX Bug 44201

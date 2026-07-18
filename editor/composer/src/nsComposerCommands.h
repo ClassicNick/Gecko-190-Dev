@@ -43,6 +43,7 @@
 
 #include "nsIControllerCommand.h"
 #include "nsString.h"
+#include "nsIFrame.h"
 
 class nsIEditor;
 

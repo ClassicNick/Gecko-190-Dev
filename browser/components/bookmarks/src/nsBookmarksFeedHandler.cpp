@@ -630,7 +630,11 @@ nsFeedLoadListener::TryParseAsSimpleRSS ()
 
     nsCOMPtr<nsIDOMDocument> xmldoc;
     // XXXbz is this the right principal?
+#ifdef MOZ_STORAGE
     parser->Init(nsnull, mURI, nsnull);
+#else
+	parser->SetBaseURI(mURI);
+#endif
     rv = parser->ParseFromBuffer ((const PRUint8*) mBody.get(), mBody.Length(), "text/xml", getter_AddRefs(xmldoc));
     if (NS_FAILED(rv)) return rv;
 

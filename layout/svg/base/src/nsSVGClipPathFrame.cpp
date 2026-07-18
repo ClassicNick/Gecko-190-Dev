@@ -38,11 +38,12 @@
 #include "nsIDocument.h"
 #include "nsIDOMSVGClipPathElement.h"
 #include "nsSVGClipPathFrame.h"
+#include "nsISVGRendererCanvas.h"
 #include "nsIDOMSVGAnimatedEnum.h"
 #include "nsGkAtoms.h"
 #include "nsSVGUtils.h"
+#include "nsSVGGraphicElement.h"
 #include "nsSVGClipPathElement.h"
-#include "gfxContext.h"
 #include "nsIDOMSVGRect.h"
 
 //----------------------------------------------------------------------
@@ -62,17 +63,35 @@ NS_NewSVGClipPathFrame(nsIPresShell* aPresShell, nsIContent* aContent, nsStyleCo
   return new (aPresShell) nsSVGClipPathFrame(aContext);
 }
 
-nsIContent *
-NS_GetSVGClipPathElement(nsIURI *aURI, nsIContent *aContent)
+nsresult
+NS_GetSVGClipPathFrame(nsSVGClipPathFrame **aResult,
+                       nsIURI *aURI, nsIContent *aContent)
 {
-  nsIContent* content = nsContentUtils::GetReferencedElement(aURI, aContent);
+  *aResult = nsnull;
 
-  nsCOMPtr<nsIDOMSVGClipPathElement> clipPath = do_QueryInterface(content);
+  // Get the PresShell
+  nsIDocument *myDoc = aContent->GetCurrentDoc();
+  if (!myDoc) {
+    NS_WARNING("No document for this content!");
+    return NS_ERROR_FAILURE;
+  }
+  nsIPresShell *presShell = myDoc->GetShellAt(0);
+  if (!presShell) {
+    NS_WARNING("no presshell");
+    return NS_ERROR_FAILURE;
+  }
 
-  if (clipPath)
-    return content;
+  // Find the referenced frame
+  nsIFrame *cpframe;
+  if (!NS_SUCCEEDED(nsSVGUtils::GetReferencedFrame(&cpframe, aURI, aContent, presShell)))
+    return NS_ERROR_FAILURE;
 
-  return nsnull;
+  nsIAtom* frameType = cpframe->GetType();
+  if (frameType != nsGkAtoms::svgClipPathFrame)
+    return NS_ERROR_FAILURE;
+
+  *aResult = (nsSVGClipPathFrame *)cpframe;
+  return NS_OK;
 }
 
 NS_IMETHODIMP
@@ -88,10 +107,10 @@ nsSVGClipPathFrame::InitSVG()
   return NS_OK;
 }
 
-nsresult
-nsSVGClipPathFrame::ClipPaint(nsSVGRenderState* aContext,
+NS_IMETHODIMP
+nsSVGClipPathFrame::ClipPaint(nsISVGRendererCanvas* canvas,
                               nsISVGChildFrame* aParent,
-                              nsIDOMSVGMatrix *aMatrix)
+                              nsCOMPtr<nsIDOMSVGMatrix> aMatrix)
 {
   // If the flag is set when we get here, it means this clipPath frame
   // has already been used painting the current clip, and the document
@@ -100,16 +119,24 @@ nsSVGClipPathFrame::ClipPaint(nsSVGRenderState* aContext,
     NS_WARNING("Clip loop detected!");
     return NS_OK;
   }
-  AutoClipPathReferencer clipRef(this);
+  mInUse = PR_TRUE;
+
+  nsRect dirty;
+  nsresult rv;
 
   mClipParent = aParent,
   mClipParentMatrix = aMatrix;
 
-  PRBool isTrivial = IsTrivial();
+  PRBool isTrivial;
+  IsTrivial(&isTrivial);
 
-  nsAutoSVGRenderMode mode(aContext,
-                           isTrivial ? nsSVGRenderState::CLIP
-                                     : nsSVGRenderState::CLIP_MASK);
+  if (isTrivial)
+    rv = canvas->SetRenderMode(nsISVGRendererCanvas::SVG_RENDER_MODE_CLIP);
+  else
+    rv = canvas->SetRenderMode(nsISVGRendererCanvas::SVG_RENDER_MODE_CLIP_MASK);
+
+  if (NS_FAILED(rv))
+    return NS_ERROR_FAILURE;
 
   for (nsIFrame* kid = mFrames.FirstChild(); kid;
        kid = kid->GetNextSibling()) {
@@ -117,31 +144,32 @@ nsSVGClipPathFrame::ClipPaint(nsSVGRenderState* aContext,
     CallQueryInterface(kid, &SVGFrame);
     if (SVGFrame) {
       SVGFrame->NotifyCanvasTMChanged(PR_TRUE);
-      SVGFrame->PaintSVG(aContext, nsnull);
+      SVGFrame->PaintSVG(canvas, nsnull);
     }
   }
 
-  if (isTrivial) {
-    aContext->GetGfxContext()->Clip();
-    aContext->GetGfxContext()->NewPath();
-  }
+  canvas->SetRenderMode(nsISVGRendererCanvas::SVG_RENDER_MODE_NORMAL);
+
+  mInUse = PR_FALSE;
 
   return NS_OK;
 }
 
-PRBool
+NS_IMETHODIMP
 nsSVGClipPathFrame::ClipHitTest(nsISVGChildFrame* aParent,
-                                nsIDOMSVGMatrix *aMatrix,
-                                float aX, float aY)
+                                nsCOMPtr<nsIDOMSVGMatrix> aMatrix,
+                                float aX, float aY, PRBool *aHit)
 {
+  *aHit = PR_FALSE;
+
   // If the flag is set when we get here, it means this clipPath frame
   // has already been used in hit testing against the current clip,
   // and the document has a clip reference loop.
   if (mInUse) {
     NS_WARNING("Clip loop detected!");
-    return PR_FALSE;
+    return NS_OK;
   }
-  AutoClipPathReferencer clipRef(this);
+  mInUse = PR_TRUE;
 
   nsRect dirty;
   mClipParent = aParent,
@@ -159,16 +187,23 @@ nsSVGClipPathFrame::ClipHitTest(nsISVGChildFrame* aParent,
 
       nsIFrame *temp = nsnull;
       nsresult rv = SVGFrame->GetFrameForPointSVG(aX, aY, &temp);
-      if (NS_SUCCEEDED(rv) && temp)
-        return PR_TRUE;
+      if (NS_SUCCEEDED(rv) && temp) {
+        *aHit = PR_TRUE;
+        mInUse = PR_FALSE;
+        return NS_OK;
+      }
     }
   }
-  return PR_FALSE;
+
+  mInUse = PR_FALSE;
+
+  return NS_OK;
 }
 
-PRBool
-nsSVGClipPathFrame::IsTrivial()
+NS_IMETHODIMP
+nsSVGClipPathFrame::IsTrivial(PRBool *aTrivial)
 {
+  *aTrivial = PR_TRUE;
   PRBool foundChild = PR_FALSE;
 
   for (nsIFrame* kid = mFrames.FirstChild(); kid;
@@ -179,12 +214,15 @@ nsSVGClipPathFrame::IsTrivial()
     if (svgChild) {
       // We consider a non-trivial clipPath to be one containing
       // either more than one svg child and/or a svg container
-      if (foundChild || svgChild->IsDisplayContainer())
-        return PR_FALSE;
+      if (foundChild || svgChild->IsDisplayContainer()) {
+        *aTrivial = PR_FALSE;
+        return NS_OK;
+      }
       foundChild = PR_TRUE;
     }
   }
-  return PR_TRUE;
+
+  return NS_OK;
 }
 
 nsIAtom *

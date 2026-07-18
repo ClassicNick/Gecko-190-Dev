@@ -37,6 +37,10 @@
 
 /* entry point wrappers. */
 
+#if defined(XP_MAC)
+#pragma export on
+#endif
+
 #include "xptcprivate.h"
 #include "xptiprivate.h"
 
@@ -86,6 +90,9 @@ NS_GetXPTCallStub(REFNSIID aIID, nsIXPTCProxy* aOuter,
     *aResult = newbase;
     return NS_OK;
 }
+#if defined(XP_MAC)
+#pragma export off
+#endif
 
 EXPORT_XPCOM_API(void)
 NS_DestroyXPTCallStub(nsISomeInterface* aStub)

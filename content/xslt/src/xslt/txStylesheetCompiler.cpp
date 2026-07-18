@@ -996,7 +996,7 @@ typedef nsresult (*txFunctionFactory)(nsIAtom* aName,
                                       FunctionCall** aResult);
 struct txFunctionFactoryMapping
 {
-    const char* const mNamespaceURI;
+    const char* mNamespaceURI;
     PRInt32 mNamespaceID;
     txFunctionFactory mFactory;
 };
@@ -1111,7 +1111,7 @@ TX_XSLTFunctionAvailable(nsIAtom* aName, PRInt32 aNameSpaceID)
 
     nsAutoPtr<FunctionCall> fnCall;
 
-    return NS_SUCCEEDED(findFunction(aName, aNameSpaceID, compiler,
+    return NS_SUCCEEDED(findFunction(aName, aNameSpaceID, compiler.get(),
                                      getter_Transfers(fnCall)));
 }
 

@@ -45,6 +45,7 @@
 
 #include "nsIDocShell.h"
 #include "nsIWebNavigation.h"
+#include "nsIFrame.h"
 
 /**
  * Load flag for error pages. This should be bigger than all flags on

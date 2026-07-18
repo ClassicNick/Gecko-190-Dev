@@ -49,6 +49,7 @@
 #include "nsStringBuffer.h"
 #include "nsColor.h"
 #include "nsCaseTreatment.h"
+#include "nsIFrame.h"
 
 typedef unsigned long PtrBits;
 class nsAString;

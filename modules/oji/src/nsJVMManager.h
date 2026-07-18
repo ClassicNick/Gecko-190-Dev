@@ -52,6 +52,7 @@
 #include "nsILiveConnectManager.h"
 
 #include "nsIObserver.h"
+#include "nsIFrame.h"
 
 class nsSymantecDebugManager;
 class nsIWebBrowserChrome;

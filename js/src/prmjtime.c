@@ -62,6 +62,11 @@
 #include <winbase.h>
 #endif
 
+#if defined (_MSC_VER) && _MSC_VER <= 1100
+typedef VOID WINAPI GetSystemTimeAsFileTimeProc(LPFILETIME lpSystemTimeAsFileTime);
+static GetSystemTimeAsFileTimeProc *getSystemTimeAsFileTimeFunc = NULL;
+#endif
+
 #if defined(XP_UNIX) || defined(XP_BEOS)
 
 #ifdef _SVID_GETTOD   /* Defined only on Solaris, see Solaris <sys/types.h> */
@@ -173,16 +178,30 @@ PRMJ_Now(void)
     return s;
 #endif
 #ifdef XP_WIN
+#if defined (_MSC_VER) && _MSC_VER <= 1100
+	HMODULE kernel = GetModuleHandle("kernel32.dll");
+    if (kernel) {
+      getSystemTimeAsFileTimeFunc = (GetSystemTimeAsFileTimeProc*)GetProcAddress(kernel, "GetSystemTimeAsFileTime");
+    }
+#endif
     /* The windows epoch is around 1600. The unix epoch is around 1970.
        win2un is the difference (in windows time units which are 10 times
        more precise than the JS time unit) */
+#if !defined (_MSC_VER) || _MSC_VER >= 1200
     GetSystemTimeAsFileTime(&time);
+#else
+	getSystemTimeAsFileTimeFunc(&time);
+#endif
     /* Win9x gets confused at midnight
        http://support.microsoft.com/default.aspx?scid=KB;en-us;q224423
        So if the low part (precision <8mins) is 0 then we get the time
        again. */
     if (!time.dwLowDateTime) {
+		#if defined (_MSC_VER) && _MSC_VER >= 1200
         GetSystemTimeAsFileTime(&midnight);
+#else
+		getSystemTimeAsFileTimeFunc(&time);
+#endif
         time.dwHighDateTime = midnight.dwHighDateTime;
     }
     JSLL_UI2L(s, time.dwHighDateTime);

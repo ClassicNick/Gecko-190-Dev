@@ -80,6 +80,7 @@ REQUIRES	= xpcom \
 		  rdf \
 		  prefetch \
 		  imglib2 \
+		  locale \
 		  $(NULL)
 
 EXPORTS = \

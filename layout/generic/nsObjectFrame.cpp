@@ -107,7 +107,6 @@
 #include "nsContentUtils.h"
 #include "nsDisplayList.h"
 #include "nsAttrName.h"
-#include "nsDataHashtable.h"
 
 // headers for plugin scriptability
 #include "nsIScriptGlobalObject.h"
@@ -392,7 +391,7 @@ private:
 };
 
 #if defined(XP_WIN) || (defined(DO_DIRTY_INTERSECT) && defined(XP_MACOSX))
-static void ConvertAppUnitsToPixels(nsPresContext& aPresContext, nsRect& aTwipsRect, nsRect& aPixelRect);
+static void ConvertTwipsToPixels(nsPresContext& aPresContext, nsRect& aTwipsRect, nsRect& aPixelRect);
 #endif
 
   // Mac specific code to fix up port position and clip during paint
@@ -543,6 +542,15 @@ nsObjectFrame::CreateWidget(nscoord aWidth,
   // XXX is the above comment correct?
   viewMan->SetViewVisibility(view, nsViewVisibility_kHide);
 
+  // Turn off double buffering on the Mac. This depends on bug 49743 and partially
+  // fixes 32327, 19931 and 51787
+#ifdef XP_MACOSX
+  PRBool doubleBuffer =
+    nsContentUtils::GetBoolPref("plugin.enable_double_buffer");
+  
+  viewMan->AllowDoubleBuffering(doubleBuffer);
+#endif
+  
   //this is ugly. it was ripped off from didreflow(). MMP
   // Position and size view relative to its parent, not relative to our
   // parent frame (our parent frame may not have a view).
@@ -595,7 +603,8 @@ nsObjectFrame::GetMinWidth(nsIRenderingContext *aRenderingContext)
   if (!IsHidden(PR_FALSE)) {
     nsIAtom *atom = mContent->Tag();
     if (atom == nsGkAtoms::applet || atom == nsGkAtoms::embed) {
-      result = nsPresContext::CSSPixelsToAppUnits(EMBED_DEF_WIDTH);
+      float p2t = PresContext()->ScaledPixelsToTwips();
+      result = NSIntPixelsToTwips(EMBED_DEF_WIDTH, p2t);
     }
   }
 
@@ -628,13 +637,14 @@ nsObjectFrame::GetDesiredSize(nsPresContext* aPresContext,
   // for EMBED and APPLET, default to 240x200 for compatibility
   nsIAtom *atom = mContent->Tag();
   if (atom == nsGkAtoms::applet || atom == nsGkAtoms::embed) {
+    float p2t = aPresContext->ScaledPixelsToTwips();
     if (aMetrics.width == NS_UNCONSTRAINEDSIZE) {
-      aMetrics.width = PR_MIN(PR_MAX(nsPresContext::CSSPixelsToAppUnits(EMBED_DEF_WIDTH),
+      aMetrics.width = PR_MIN(PR_MAX(NSIntPixelsToTwips(EMBED_DEF_WIDTH, p2t),
                                      aReflowState.mComputedMinWidth),
                               aReflowState.mComputedMaxWidth);
     }
     if (aMetrics.height == NS_UNCONSTRAINEDSIZE) {
-      aMetrics.height = PR_MIN(PR_MAX(nsPresContext::CSSPixelsToAppUnits(EMBED_DEF_HEIGHT),
+      aMetrics.height = PR_MIN(PR_MAX(NSIntPixelsToTwips(EMBED_DEF_HEIGHT, p2t),
                                       aReflowState.mComputedMinHeight),
                                aReflowState.mComputedMaxHeight);
     }
@@ -644,8 +654,8 @@ nsObjectFrame::GetDesiredSize(nsPresContext* aPresContext,
     // exceed the maximum size of X coordinates.  See bug #225357 for
     // more information.  In theory Gtk2 can handle large coordinates,
     // but underlying plugins can't.
-    aMetrics.height = PR_MIN(aPresContext->DevPixelsToAppUnits(PR_INT16_MAX), aMetrics.height);
-    aMetrics.width = PR_MIN(aPresContext->DevPixelsToAppUnits(PR_INT16_MAX), aMetrics.width);
+    aMetrics.height = PR_MIN(NSIntPixelsToTwips(PR_INT16_MAX, p2t), aMetrics.height);
+    aMetrics.width = PR_MIN(NSIntPixelsToTwips(PR_INT16_MAX, p2t), aMetrics.width);
 #endif
   }
 
@@ -766,6 +776,8 @@ nsObjectFrame::FixupWindow(const nsSize& aSize)
 {
   nsPresContext* presContext = PresContext();
 
+  float t2p = presContext->TwipsToPixels();
+
   if (!mInstanceOwner)
     return;
 
@@ -777,10 +789,10 @@ nsObjectFrame::FixupWindow(const nsSize& aSize)
   nsPoint origin;
   nsIView *parentWithView;
   GetOffsetFromView(origin, &parentWithView);
-  window->x = presContext->AppUnitsToDevPixels(origin.x);
-  window->y = presContext->AppUnitsToDevPixels(origin.y);
-  window->width = presContext->AppUnitsToDevPixels(aSize.width);
-  window->height = presContext->AppUnitsToDevPixels(aSize.height);
+  window->x = NSTwipsToIntPixels(origin.x, t2p);
+  window->y = NSTwipsToIntPixels(origin.y, t2p);
+  window->width = NSTwipsToIntPixels(aSize.width, t2p);
+  window->height = NSTwipsToIntPixels(aSize.height, t2p);
 
   // on the Mac we need to set the clipRect to { 0, 0, 0, 0 } for now. This will keep
   // us from drawing on screen until the widget is properly positioned, which will not
@@ -791,8 +803,8 @@ nsObjectFrame::FixupWindow(const nsSize& aSize)
   window->clipRect.bottom = 0;
   window->clipRect.right = 0;
 #else
-  window->clipRect.bottom = presContext->AppUnitsToDevPixels(aSize.height);
-  window->clipRect.right = presContext->AppUnitsToDevPixels(aSize.width);
+  window->clipRect.bottom = NSTwipsToIntPixels(aSize.height, t2p);
+  window->clipRect.right = NSTwipsToIntPixels(aSize.width, t2p);
 #endif
 }
 
@@ -859,8 +871,10 @@ nsPoint nsObjectFrame::GetWindowOriginInPixels(PRBool aWindowless)
     }  
   }
 
-  origin.x = PresContext()->AppUnitsToDevPixels(origin.x);
-  origin.y = PresContext()->AppUnitsToDevPixels(origin.y);
+  float t2p;
+  t2p = PresContext()->TwipsToPixels();
+  origin.x = NSTwipsToIntPixels(origin.x, t2p);
+  origin.y = NSTwipsToIntPixels(origin.y, t2p);
 
   return origin;
 }
@@ -1024,13 +1038,15 @@ nsObjectFrame::PrintPlugin(nsIRenderingContext& aRenderingContext,
   aRenderingContext.GetCurrentTransform(rcTransform);
   nsPoint origin;
   rcTransform->GetTranslationCoord(&origin.x, &origin.y);
-
+  
+  // Get the conversion factor between pixels and twips
+  float t2p = presContext->TwipsToPixels();
   // set it all up
   // XXX is windowless different?
   window.x = origin.x;
   window.y = origin.y;
-  window.width = presContext->AppUnitsToDevPixels(mRect.width);
-  window.height= presContext->AppUnitsToDevPixels(mRect.height);
+  window.width = NSToCoordRound(mRect.width * t2p);
+  window.height= NSToCoordRound(mRect.height * t2p);
   window.clipRect.bottom = 0; window.clipRect.top = 0;
   window.clipRect.left = 0; window.clipRect.right = 0;
   
@@ -1852,12 +1868,13 @@ NS_IMETHODIMP nsPluginInstanceOwner::InvalidateRect(nsPluginRect *invalidRect)
     nsIView* view = mOwner->GetView();
 
     if (view) {
-      nsPresContext* presContext = mOwner->PresContext();
+      float ptot;
+      ptot = mOwner->PresContext()->PixelsToTwips();
 
-      nsRect rect(presContext->DevPixelsToAppUnits(invalidRect->left),
-            presContext->DevPixelsToAppUnits(invalidRect->top),
-            presContext->DevPixelsToAppUnits(invalidRect->right - invalidRect->left),
-            presContext->DevPixelsToAppUnits(invalidRect->bottom - invalidRect->top));
+      nsRect rect((int)(ptot * invalidRect->left),
+            (int)(ptot * invalidRect->top),
+            (int)(ptot * (invalidRect->right - invalidRect->left)),
+            (int)(ptot * (invalidRect->bottom - invalidRect->top)));
 
       //set flags to not do a synchronous update, force update does the redraw
       view->GetViewManager()->UpdateView(view, rect, NS_VMREFRESH_NO_SYNC);
@@ -2076,7 +2093,7 @@ NS_IMETHODIMP nsPluginInstanceOwner::GetDocumentBase(const char* *result)
   return rv;
 }
 
-static nsDataHashtable<nsDepCharHashKey, const char *> * gCharsetMap;
+static nsHashtable *gCharsetMap = nsnull;
 typedef struct {
     char mozName[16];
     char javaName[12];
@@ -2140,7 +2157,7 @@ static const moz2javaCharset charsets[] =
     {"Shift_JIS",       "SJIS"},
     {"TIS-620",         "TIS620"}
 };
-
+  
 NS_IMETHODIMP nsPluginInstanceOwner::GetDocumentEncoding(const char* *result)
 {
   NS_ENSURE_ARG_POINTER(result);
@@ -2154,7 +2171,7 @@ NS_IMETHODIMP nsPluginInstanceOwner::GetDocumentEncoding(const char* *result)
   if (NS_FAILED(rv))
     return rv;
 
-  const nsCString &charset = doc->GetDocumentCharacterSet();
+  const nsACString &charset = doc->GetDocumentCharacterSet();
 
   if (charset.IsEmpty())
     return NS_OK;
@@ -2167,19 +2184,19 @@ NS_IMETHODIMP nsPluginInstanceOwner::GetDocumentEncoding(const char* *result)
     *result = ToNewCString(charset);
   } else {
     if (!gCharsetMap) {
-      const int NUM_CHARSETS = sizeof(charsets) / sizeof(moz2javaCharset);
-      gCharsetMap = new nsDataHashtable<nsDepCharHashKey, const char*>();
-      if (!gCharsetMap || !gCharsetMap->Init(NUM_CHARSETS))
+      gCharsetMap = new nsHashtable(sizeof(charsets)/sizeof(moz2javaCharset));
+      if (!gCharsetMap)
         return NS_ERROR_OUT_OF_MEMORY;
 
-      for (PRUint16 i = 0; i < NUM_CHARSETS; i++) {
-        gCharsetMap->Put(charsets[i].mozName, charsets[i].javaName);
+      for (PRUint16 i = 0; i < sizeof(charsets)/sizeof(moz2javaCharset); i++) {
+        nsCStringKey key(charsets[i].mozName);
+        gCharsetMap->Put(&key, (void *)(charsets[i].javaName));
       }
     }
+    nsCStringKey mozKey(charset);
     // if found mapping, return it; otherwise return original charset
-    const char *mapping;
-    *result = gCharsetMap->Get(charset.get(), &mapping) ? PL_strdup(mapping) :
-                                                          ToNewCString(charset);
+    char *mapping = (char *)gCharsetMap->Get(&mozKey);
+    *result = mapping ? PL_strdup(mapping) : ToNewCString(charset);
   }
 
   return (*result) ? NS_OK : NS_ERROR_OUT_OF_MEMORY;
@@ -3168,7 +3185,7 @@ void nsPluginInstanceOwner::Paint(const nsRect& aDirtyRect, PRUint32 ndc)
 
   // Convert to absolute pixel values for the dirty rect
   nsRect absDirtyRectInPixels;
-  ConvertAppUnitsToPixels(*mOwner->GetPresContext(), absDirtyRect,
+  ConvertTwipsToPixels(*mOwner->PresContext(), absDirtyRect,
                        absDirtyRectInPixels);
 #endif
 
@@ -3194,8 +3211,8 @@ void nsPluginInstanceOwner::Paint(const nsRect& aDirtyRect, PRUint32 ndc)
   GetWindow(window);
   nsRect relDirtyRect = nsRect(aDirtyRect.x, aDirtyRect.y, aDirtyRect.width, aDirtyRect.height);
   nsRect relDirtyRectInPixels;
-  ConvertAppUnitsToPixels(*mOwner->PresContext(), relDirtyRect,
-                          relDirtyRectInPixels);
+  ConvertTwipsToPixels(*mOwner->PresContext(), relDirtyRect,
+                       relDirtyRectInPixels);
 
   // we got dirty rectangle in relative window coordinates, but we
   // need it in absolute units and in the (left, top, right, bottom) form
@@ -3385,9 +3402,9 @@ NS_IMETHODIMP nsPluginInstanceOwner::CreateWidget(void)
                           (void *)&windowless);
 
       // always create widgets in Twips, not pixels
-      nsPresContext* context = mOwner->PresContext();
-      rv = mOwner->CreateWidget(context->DevPixelsToAppUnits(mPluginWindow->width),
-                                context->DevPixelsToAppUnits(mPluginWindow->height),
+      float p2t = mOwner->PresContext()->ScaledPixelsToTwips();
+      rv = mOwner->CreateWidget(NSIntPixelsToTwips(mPluginWindow->width, p2t),
+                                NSIntPixelsToTwips(mPluginWindow->height, p2t),
                                 windowless);
       if (NS_OK == rv) {
         view = mOwner->GetView();
@@ -3433,12 +3450,14 @@ void nsPluginInstanceOwner::SetPluginHost(nsIPluginHost* aHost)
 
 #if defined(XP_WIN) || (defined(DO_DIRTY_INTERSECT) && defined(XP_MACOSX))
 // convert frame coordinates from twips to pixels
-static void ConvertAppUnitsToPixels(nsPresContext& aPresContext, nsRect& aTwipsRect, nsRect& aPixelRect)
+static void ConvertTwipsToPixels(nsPresContext& aPresContext, nsRect& aTwipsRect, nsRect& aPixelRect)
 {
-  aPixelRect.x = aPresContext.AppUnitsToDevPixels(aTwipsRect.x);
-  aPixelRect.y = aPresContext.AppUnitsToDevPixels(aTwipsRect.y);
-  aPixelRect.width = aPresContext.AppUnitsToDevPixels(aTwipsRect.width);
-  aPixelRect.height = aPresContext.AppUnitsToDevPixels(aTwipsRect.height);
+  float t2p;
+  t2p = aPresContext.TwipsToPixels();
+  aPixelRect.x = NSTwipsToIntPixels(aTwipsRect.x, t2p);
+  aPixelRect.y = NSTwipsToIntPixels(aTwipsRect.y, t2p);
+  aPixelRect.width = NSTwipsToIntPixels(aTwipsRect.width, t2p);
+  aPixelRect.height = NSTwipsToIntPixels(aTwipsRect.height, t2p);
 }
 #endif
 

@@ -99,7 +99,7 @@ private:                                                                    \
 public:                                                                     \
 
 #define NS_DECL_AGGREGATED_CYCLE_COLLECTION_CLASS(_class)                   \
-class NS_CYCLE_COLLECTION_INNERCLASS                                        \
+class NS_CYCLE_COLLECTION_INNERCLASS(_class)                                        \
  : public nsCycleCollectionParticipant                                      \
 {                                                                           \
 public:                                                                     \
@@ -118,7 +118,8 @@ public:                                                                     \
   {                                                                         \
     return p->InnerObject();                                                \
   }                                                                         \
-};                                                           
+};																			\
+friend class NS_CYCLE_COLLECTION_INNERCLASS(_class);
 
 // Put this in your class's constructor:
 #define NS_INIT_AGGREGATED(outer)                                           \

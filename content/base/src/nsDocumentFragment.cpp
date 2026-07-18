@@ -35,6 +35,7 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+#include "nsISupportsUtils.h"
 /*
  * Implementation of DOM Core's nsIDOMDocumentFragment.
  */

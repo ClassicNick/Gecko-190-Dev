@@ -36,6 +36,7 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+#include "nsISVGRenderer.h"
 #include "nsSVGOuterSVGFrame.h"
 #include "nsSVGTextFrame.h"
 #include "nsILookAndFeel.h"
@@ -51,14 +52,8 @@
 #include "nsSVGPoint.h"
 #include "nsSVGRect.h"
 #include "nsDOMError.h"
-#include "gfxContext.h"
-#include "gfxMatrix.h"
-#include "gfxPlatform.h"
-
-// XXX: This initial straightforward conversion from accessing cairo
-// directly to Thebes doesn't handle clusters.  Pretty much all code
-// that measures or draws single characters (textPath code and some
-// DOM accessors) will need to be reworked.
+#include "nsISVGCairoCanvas.h"
+#include "cairo.h"
 
 //----------------------------------------------------------------------
 // Implementation
@@ -122,35 +117,6 @@ nsSVGGlyphFrame::DidSetStyleContext()
 {
   nsSVGGlyphFrameBase::DidSetStyleContext();
 
-  const nsStyleFont* fontData = GetStyleFont();
-  nsFont font = fontData->mFont;
-
-  // Since SVG has its own scaling, we really don't want
-  // fonts in SVG to respond to the browser's "TextZoom"
-  // (Ctrl++,Ctrl+-)
-  nsPresContext *presContext = PresContext();
-  float textZoom = presContext->TextZoom();
-  double size = presContext->AppUnitsToDevPixels(fontData->mSize) / textZoom;
-
-  nsCAutoString langGroup;
-  nsIAtom *langGroupAtom = presContext->GetLangGroup();
-  if (langGroupAtom) {
-    const char* lg;
-    langGroupAtom->GetUTF8String(&lg);
-    langGroup.Assign(lg);
-  }
-
-  // XXX decorations are ignored by gfxFontStyle - still need to implement
-  mFontStyle = new gfxFontStyle(font.style, font.variant,
-                                font.weight, font.decorations,
-                                size, langGroup, font.sizeAdjust,
-                                font.systemFont, font.familyNameQuirks);
-
-  if (mFontStyle) {
-    mFontGroup =
-      gfxPlatform::GetPlatform()->CreateFontGroup(font.name, mFontStyle);
-  }
-
   return UpdateGraphic();
 }
 
@@ -213,52 +179,38 @@ nsSVGGlyphFrame::GetType() const
 // nsISVGChildFrame methods
 
 void
-nsSVGGlyphFrame::LoopCharacters(gfxContext *aCtx, const nsString &aText,
+nsSVGGlyphFrame::LoopCharacters(cairo_t *aCtx, const nsAString &aText,
                                 const nsSVGCharacterPosition *aCP,
-                                FillOrStroke aFillOrStroke)
+                                void (*aFunc)(cairo_t *cr, const char *utf8))
 {
-  nsAutoPtr<gfxTextRun> textRun(GetTextRun(aCtx, aText));
-
-  if (!textRun)
-    return;
-
   if (!aCP) {
-    if (aFillOrStroke == STROKE) {
-      textRun->DrawToPath(aCtx, mPosition, 0, aText.Length(), nsnull, nsnull);
-    } else {
-      textRun->Draw(aCtx, mPosition, 0, aText.Length(),
-                    nsnull, nsnull, nsnull);
-    }
+    aFunc(aCtx, NS_ConvertUTF16toUTF8(aText).get());
   } else {
     for (PRUint32 i = 0; i < aText.Length(); i++) {
       /* character actually on the path? */
       if (aCP[i].draw == PR_FALSE)
         continue;
-
-      gfxMatrix matrix = aCtx->CurrentMatrix();
-
-      gfxMatrix rot;
-      rot.Rotate(aCP[i].angle);
-      aCtx->Multiply(rot);
-
-      rot.Invert();
-      gfxPoint pt = rot.Transform(aCP[i].pos);
-
-      if (aFillOrStroke == STROKE) {
-        textRun->DrawToPath(aCtx, pt, i, 1, nsnull, nsnull);
-      } else {
-        textRun->Draw(aCtx, pt, i, 1, nsnull, nsnull, nsnull);
-      }
-      aCtx->SetMatrix(matrix);
+      cairo_matrix_t matrix;
+      cairo_get_matrix(aCtx, &matrix);
+      cairo_move_to(aCtx, aCP[i].x, aCP[i].y);
+      cairo_rotate(aCtx, aCP[i].angle);
+      aFunc(aCtx, NS_ConvertUTF16toUTF8(Substring(aText, i, 1)).get());
+      cairo_set_matrix(aCtx, &matrix);
     }
   }
 }
 
 NS_IMETHODIMP
-nsSVGGlyphFrame::PaintSVG(nsSVGRenderState *aContext, nsRect *aDirtyRect)
+nsSVGGlyphFrame::PaintSVG(nsISVGRendererCanvas* canvas, nsRect *aDirtyRect)
 {
   if (!GetStyleVisibility()->IsVisible())
     return NS_OK;
+
+  nsCOMPtr<nsISVGCairoCanvas> cairoCanvas = do_QueryInterface(canvas);
+  NS_ASSERTION(cairoCanvas, "wrong svg render context for geometry!");
+  if (!cairoCanvas) {
+    return NS_ERROR_FAILURE;
+  }
 
   nsAutoString text;
   if (!GetCharacterData(text)) {
@@ -267,63 +219,69 @@ nsSVGGlyphFrame::PaintSVG(nsSVGRenderState *aContext, nsRect *aDirtyRect)
 
   nsAutoArrayPtr<nsSVGCharacterPosition> cp;
 
-  gfxContext *gfx = aContext->GetGfxContext();
+  cairo_t *ctx = cairoCanvas->GetContext();
 
-  nsresult rv = GetCharacterPosition(gfx, text, getter_Transfers(cp));
+  SelectFont(ctx);
 
-  gfxMatrix matrix;
+  nsresult rv = GetCharacterPosition(ctx, text, getter_Transfers(cp));
 
-  PRUint16 renderMode = aContext->GetRenderMode();
-
-  if (renderMode == nsSVGRenderState::NORMAL) {
+  PRUint16 renderMode;
+  cairo_matrix_t matrix;
+  canvas->GetRenderMode(&renderMode);
+  if (renderMode == nsISVGRendererCanvas::SVG_RENDER_MODE_NORMAL) {
     /* save/pop the state so we don't screw up the xform */
-    gfx->Save();
+    cairo_save(ctx);
   }
   else {
-    matrix = gfx->CurrentMatrix();
+    cairo_get_matrix(ctx, &matrix);
   }
 
-  rv = GetGlobalTransform(gfx);
+  rv = GetGlobalTransform(ctx, cairoCanvas);
   if (NS_FAILED(rv)) {
-    if (renderMode == nsSVGRenderState::NORMAL)
-      gfx->Restore();
+    if (renderMode == nsISVGRendererCanvas::SVG_RENDER_MODE_NORMAL)
+      cairo_restore(ctx);
     return rv;
   }
 
-  if (renderMode != nsSVGRenderState::NORMAL) {
-    if (GetClipRule() == NS_STYLE_FILL_RULE_EVENODD)
-      gfx->SetFillRule(gfxContext::FILL_RULE_EVEN_ODD);
-    else
-      gfx->SetFillRule(gfxContext::FILL_RULE_WINDING);
+  if (!cp)
+    cairo_move_to(ctx, mX, mY);
 
-    if (renderMode == nsSVGRenderState::CLIP_MASK) {
-      gfx->SetAntialiasMode(gfxContext::MODE_ALIASED);
-      gfx->SetColor(gfxRGBA(1.0f, 1.0f, 1.0f, 1.0f));
-      LoopCharacters(gfx, text, cp, FILL);
+  if (renderMode != nsISVGRendererCanvas::SVG_RENDER_MODE_NORMAL) {
+    if (GetClipRule() == NS_STYLE_FILL_RULE_EVENODD)
+      cairo_set_fill_rule(ctx, CAIRO_FILL_RULE_EVEN_ODD);
+    else
+      cairo_set_fill_rule(ctx, CAIRO_FILL_RULE_WINDING);
+
+    if (renderMode == nsISVGRendererCanvas::SVG_RENDER_MODE_CLIP_MASK) {
+      cairo_set_antialias(ctx, CAIRO_ANTIALIAS_NONE);
+      cairo_set_source_rgba(ctx, 1.0f, 1.0f, 1.0f, 1.0f);
+      LoopCharacters(ctx, text, cp, cairo_show_text);
     } else {
-      LoopCharacters(gfx, text, cp, STROKE);
+      LoopCharacters(ctx, text, cp, cairo_text_path);
     }
 
-    gfx->SetMatrix(matrix);
+    cairo_set_matrix(ctx, &matrix);
 
     return NS_OK;
   }
 
   void *closure;
-  if (HasFill() && SetupCairoFill(gfx, &closure)) {
-    LoopCharacters(gfx, text, cp, FILL);
-    CleanupCairoFill(gfx, closure);
+  if (HasFill() && NS_SUCCEEDED(SetupCairoFill(canvas, ctx, &closure))) {
+    LoopCharacters(ctx, text, cp, cairo_show_text);
+    CleanupCairoFill(ctx, closure);
   }
 
-  if (HasStroke() && SetupCairoStroke(gfx, &closure)) {
-    gfx->NewPath();
-    LoopCharacters(gfx, text, cp, STROKE);
-    gfx->Stroke();
-    CleanupCairoStroke(gfx, closure);
-    gfx->NewPath();
+  if (HasStroke() && NS_SUCCEEDED(SetupCairoStroke(canvas, ctx, &closure))) {
+    cairo_new_path(ctx);
+    if (!cp)
+      cairo_move_to(ctx, mX, mY);
+    LoopCharacters(ctx, text, cp, cairo_text_path);
+    cairo_stroke(ctx);
+    CleanupCairoStroke(ctx, closure);
+    cairo_new_path(ctx);
   }
 
-  gfx->Restore();
+  cairo_restore(ctx);
 
   return NS_OK;
 }
@@ -408,64 +366,60 @@ nsSVGGlyphFrame::UpdateCoveredRegion()
 
   nsSVGAutoGlyphHelperContext ctx(this, text, getter_Transfers(cp));
 
-  gfxContext *gfx = ctx.GetContext();
-  gfxTextRun *textRun = ctx.GetTextRun();
-  if (!gfx || !textRun)
-    return NS_ERROR_OUT_OF_MEMORY;
-
-  nsresult rv = GetGlobalTransform(gfx);
+  nsresult rv = GetGlobalTransform(ctx, nsnull);
   NS_ENSURE_SUCCESS(rv, rv);
 
   if (!cp) {
+    cairo_move_to(ctx, mX, mY);
+
     if (hasStroke) {
-      textRun->DrawToPath(gfx, mPosition, 0, text.Length(), nsnull, nsnull);
+      cairo_text_path(ctx, NS_ConvertUTF16toUTF8(text).get());
     } else {
-      gfxTextRun::Metrics metrics =
-        textRun->MeasureText(0, text.Length(), PR_FALSE, nsnull);
-      gfx->Rectangle(metrics.mBoundingBox + mPosition);
+      cairo_text_extents_t extent;
+      cairo_text_extents(ctx,
+                         NS_ConvertUTF16toUTF8(text).get(),
+                         &extent);
+      cairo_rectangle(ctx, mX + extent.x_bearing, mY + extent.y_bearing,
+                      extent.width, extent.height);
     }
   } else {
+    cairo_matrix_t matrix;
     for (PRUint32 i=0; i<text.Length(); i++) {
       /* character actually on the path? */
       if (cp[i].draw == PR_FALSE)
         continue;
-
-      gfxMatrix matrix = gfx->CurrentMatrix();
-
+      cairo_get_matrix(ctx, &matrix);
+      cairo_move_to(ctx, cp[i].x, cp[i].y);
+      cairo_rotate(ctx, cp[i].angle);
       if (hasStroke) {
-        gfxMatrix rot;
-        rot.Rotate(cp[i].angle);
-        gfx->Multiply(rot);
-
-        rot.Invert();
-        gfxPoint pt = rot.Transform(cp[i].pos);
-
-        textRun->DrawToPath(gfx, pt, i, 1, nsnull, nsnull);
+        cairo_text_path(ctx, NS_ConvertUTF16toUTF8(Substring(text, i, 1)).get());
       } else {
-        gfx->MoveTo(cp[i].pos);
-        gfx->Rotate(cp[i].angle);
-
-        gfxTextRun::Metrics metrics =
-          textRun->MeasureText(i, 1, PR_FALSE, nsnull);
-
-        gfx->Rectangle(metrics.mBoundingBox + gfx->CurrentPoint());
+        cairo_text_extents_t extent;
+        cairo_text_extents(ctx,
+                           NS_ConvertUTF16toUTF8(Substring(text, i, 1)).get(),
+                           &extent);
+        cairo_rel_move_to(ctx, extent.x_bearing, extent.y_bearing);
+        cairo_rel_line_to(ctx, extent.width, 0);
+        cairo_rel_line_to(ctx, 0, extent.height);
+        cairo_rel_line_to(ctx, -extent.width, 0);
+        cairo_close_path(ctx);
       }
-      gfx->SetMatrix(matrix);
+      cairo_set_matrix(ctx, &matrix);
     }
   }
 
-  gfxRect extent;
+  double xmin, ymin, xmax, ymax;
 
   if (hasStroke) {
-    SetupCairoStrokeGeometry(gfx);
-    extent = gfx->GetUserStrokeExtent();
-    extent = gfx->UserToDevice(extent);
+    SetupCairoStrokeGeometry(ctx);
+    cairo_stroke_extents(ctx, &xmin, &ymin, &xmax, &ymax);
+    nsSVGUtils::UserToDeviceBBox(ctx, &xmin, &ymin, &xmax, &ymax);
   } else {
-    gfx->IdentityMatrix();
-    extent = gfx->GetUserFillExtent();
+    cairo_identity_matrix(ctx);
+    cairo_fill_extents(ctx, &xmin, &ymin, &xmax, &ymax);
   }
 
-  mRect = nsSVGUtils::ToBoundingPixelRect(extent);
+  mRect = nsSVGUtils::ToBoundingPixelRect(xmin, ymin, xmax, ymax);
 
   return NS_OK;
 }
@@ -523,18 +477,21 @@ nsSVGGlyphFrame::GetBBox(nsIDOMSVGRect **_retval)
 
   nsSVGAutoGlyphHelperContext ctx(this, text, getter_Transfers(cp));
 
-  gfxContext *gfx = ctx.GetContext();
-  if (!gfx)
-    return NS_ERROR_OUT_OF_MEMORY;
-
-  nsresult rv = GetGlobalTransform(gfx);
+  nsresult rv = GetGlobalTransform(ctx, nsnull);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  LoopCharacters(gfx, text, cp, STROKE);
-  gfx->IdentityMatrix();
-  gfxRect rect = gfx->GetUserFillExtent();
+  if (!cp)
+    cairo_move_to(ctx, mX, mY);
 
-  return NS_NewSVGRect(_retval, rect);
+  LoopCharacters(ctx, text, cp, cairo_text_path);
+
+  cairo_identity_matrix(ctx);
+
+  double xmin, ymin, xmax, ymax;
+
+  cairo_fill_extents(ctx, &xmin, &ymin, &xmax, &ymax);
+
+  return NS_NewSVGRect(_retval, xmin, ymin, xmax - xmin, ymax - ymin);
 }
 
 //----------------------------------------------------------------------
@@ -586,8 +543,8 @@ nsSVGGlyphFrame::GetCharacterData(nsAString & aCharacterData)
 }
 
 nsresult
-nsSVGGlyphFrame::GetCharacterPosition(gfxContext *aContext,
-                                      const nsString &aText,
+nsSVGGlyphFrame::GetCharacterPosition(cairo_t *ctx,
+                                      const nsAString &aText,
                                       nsSVGCharacterPosition **aCharacterPosition)
 {
   *aCharacterPosition = nsnull;
@@ -601,45 +558,47 @@ nsSVGGlyphFrame::GetCharacterPosition(gfxContext *aContext,
   if (!textPath)
     return NS_OK;
 
-  nsRefPtr<gfxFlattenedPath> data = textPath->GetFlattenedPath();
+  nsAutoPtr<nsSVGFlattenedPath> data(textPath->GetFlattenedPath());
 
   /* textPath frame, but invalid target */
   if (!data)
     return NS_ERROR_FAILURE;
 
-  gfxFloat length = data->GetLength();
+  float length = data->GetLength();
   PRUint32 strLength = aText.Length();
-
-  nsAutoPtr<gfxTextRun> textRun(GetTextRun(aContext, aText));
-  if (!textRun)
-    return NS_ERROR_OUT_OF_MEMORY;
 
   nsSVGCharacterPosition *cp = new nsSVGCharacterPosition[strLength];
 
   for (PRUint32 k = 0; k < strLength; k++)
     cp[k].draw = PR_FALSE;
 
-  gfxFloat x = mPosition.x;
+  float x = mX;
   for (PRUint32 i = 0; i < strLength; i++) {
-    gfxFloat halfAdvance = textRun->GetAdvanceWidth(i, 1, nsnull) / 2.0;
+
+    cairo_text_extents_t extent;
+
+    cairo_text_extents(ctx,
+                       NS_ConvertUTF16toUTF8(Substring(aText, i, 1)).get(),
+                       &extent);
+    float advance = extent.x_advance;
 
     /* have we run off the end of the path? */
-    if (x + halfAdvance > length)
+    if (x + advance / 2 > length)
       break;
 
     /* check that we've advanced to the start of the path */
-    if (x + halfAdvance >= 0.0) {
+    if (x + advance / 2 >= 0.0f) {
       cp[i].draw = PR_TRUE;
 
       // add y (normal)
       // add rotation
       // move point back along tangent
-      gfxPoint pt = data->FindPoint(gfxPoint(x + halfAdvance, mPosition.y),
-                                    &(cp[i].angle));
-      cp[i].pos =
-        pt - gfxPoint(cos(cp[i].angle), sin(cp[i].angle)) * halfAdvance;
+      data->FindPoint(advance, x, mY,
+                      &(cp[i].x),
+                      &(cp[i].y),
+                      &(cp[i].angle));
     }
-    x += 2 * halfAdvance;
+    x += advance;
   }
 
   *aCharacterPosition = cp;
@@ -794,7 +753,8 @@ nsSVGGlyphFrame::GetHighlight(PRUint32 *charnum, PRUint32 *nchars,
 NS_IMETHODIMP_(void)
 nsSVGGlyphFrame::SetGlyphPosition(float x, float y)
 {
-  mPosition.MoveTo(x, y);
+  mX = x;
+  mY = y;
   UpdateGeometry(PR_TRUE, PR_FALSE);
 }
 
@@ -810,26 +770,35 @@ nsSVGGlyphFrame::GetStartPositionOfChar(PRUint32 charnum, nsIDOMSVGPoint **_retv
 
   nsSVGAutoGlyphHelperContext ctx(this, text, getter_Transfers(cp));
 
-  gfxPoint pt;
+  float x, y;
 
   if (cp) {
     if (cp[charnum].draw == PR_FALSE) {
       return NS_ERROR_DOM_INDEX_SIZE_ERR;
     }
 
-    pt = cp[charnum].pos;
+    x = cp[charnum].x;
+    y = cp[charnum].y;
+
   } else {
-    pt = mPosition;
+    x = mX;
+    y = mY;
 
     if (charnum > 0) {
-      gfxTextRun *textRun = ctx.GetTextRun();
-      if (!textRun)
-        return NS_ERROR_OUT_OF_MEMORY;
-      pt.x += textRun->GetAdvanceWidth(0, charnum, nsnull);
+      cairo_text_extents_t extent;
+
+      cairo_text_extents(ctx,
+                         NS_ConvertUTF16toUTF8(Substring(text,
+                                                         0,
+                                                         charnum)).get(),
+                         &extent);
+
+      x += extent.x_advance;
+      y += extent.y_advance;
     }
   }
 
-  return NS_NewSVGPoint(_retval, pt);
+  return NS_NewSVGPoint(_retval, x, y);
 }
 
 NS_IMETHODIMP
@@ -841,28 +810,33 @@ nsSVGGlyphFrame::GetEndPositionOfChar(PRUint32 charnum, nsIDOMSVGPoint **_retval
   GetCharacterData(text);
 
   nsAutoArrayPtr<nsSVGCharacterPosition> cp;
-
+  
   nsSVGAutoGlyphHelperContext ctx(this, text, getter_Transfers(cp));
-  gfxTextRun *textRun = ctx.GetTextRun();
-  if (!textRun)
-    return NS_ERROR_OUT_OF_MEMORY;
 
-  gfxPoint pt;
+  cairo_text_extents_t extent;
 
   if (cp) {
     if (cp[charnum].draw == PR_FALSE) {
       return NS_ERROR_DOM_INDEX_SIZE_ERR;
     }
 
-    gfxFloat advance = textRun->GetAdvanceWidth(charnum, 1, nsnull);
-    pt = cp[charnum].pos +
-           gfxPoint(cos(cp[charnum].angle), sin(cp[charnum].angle)) * advance;
-  } else {
-    pt = mPosition;
-    pt.x += textRun->GetAdvanceWidth(0, charnum + 1, nsnull);
+    cairo_text_extents(ctx, 
+                       NS_ConvertUTF16toUTF8(Substring(text, charnum, 1)).get(),
+                       &extent);
+
+    float s = sin(cp[charnum].angle);
+    float c = cos(cp[charnum].angle);
+
+    return NS_NewSVGPoint(_retval, 
+             cp[charnum].x + extent.x_advance * c - extent.y_advance * s,
+             cp[charnum].y + extent.y_advance * c + extent.x_advance * s);
   }
 
-  return NS_NewSVGPoint(_retval, pt);
+  cairo_text_extents(ctx, 
+                     NS_ConvertUTF16toUTF8(Substring(text, 0, charnum + 1)).get(),
+                     &extent);
+
+  return NS_NewSVGPoint(_retval, mX + extent.x_advance, mY + extent.y_advance);
 }
 
 NS_IMETHODIMP
@@ -876,53 +850,66 @@ nsSVGGlyphFrame::GetExtentOfChar(PRUint32 charnum, nsIDOMSVGRect **_retval)
   nsAutoArrayPtr<nsSVGCharacterPosition> cp;
 
   nsSVGAutoGlyphHelperContext ctx(this, text, getter_Transfers(cp));
-  gfxTextRun *textRun = ctx.GetTextRun();
-  if (!textRun)
-    return NS_ERROR_OUT_OF_MEMORY;
 
-  gfxTextRun::Metrics metrics =
-    textRun->MeasureText(charnum, 1, PR_FALSE, nsnull);
+  cairo_text_extents_t extent;
+  cairo_text_extents(ctx,
+                     NS_ConvertUTF16toUTF8(Substring(text, charnum, 1)).get(),
+                     &extent);
 
   if (cp) {
     if (cp[charnum].draw == PR_FALSE) {
       return NS_ERROR_DOM_INDEX_SIZE_ERR;
     }
 
-    gfxContext *gfx = ctx.GetContext();
-    if (!gfx)
-      return NS_ERROR_OUT_OF_MEMORY;
+    cairo_matrix_t matrix;
+    cairo_get_matrix(ctx, &matrix);
+    cairo_move_to(ctx, cp[charnum].x, cp[charnum].y);
+    cairo_rotate(ctx, cp[charnum].angle);
 
-    gfxMatrix matrix = gfx->CurrentMatrix();
+    cairo_rel_move_to(ctx, extent.x_bearing, extent.y_bearing);
+    cairo_rel_line_to(ctx, extent.width, 0);
+    cairo_rel_line_to(ctx, 0, extent.height);
+    cairo_rel_line_to(ctx, -extent.width, 0);
+    cairo_close_path(ctx);
+    cairo_identity_matrix(ctx);
 
-    gfx->MoveTo(cp[charnum].pos);
-    gfx->Rotate(cp[charnum].angle);
+    double xmin, ymin, xmax, ymax;
 
-    gfx->Rectangle(metrics.mBoundingBox + gfx->CurrentPoint());
+    cairo_fill_extents(ctx, &xmin, &ymin, &xmax, &ymax);
 
-    gfx->IdentityMatrix();
+    cairo_set_matrix(ctx, &matrix);
 
-    gfxRect rect = gfx->GetUserFillExtent();
-
-    gfx->SetMatrix(matrix);
-
-    return NS_NewSVGRect(_retval, rect);
+    return NS_NewSVGRect(_retval, xmin, ymin, xmax - xmin, ymax - ymin);
   }
 
-  gfxPoint pt = mPosition;
+  float x = mX;
+  float y = mY;
+
+  x += extent.x_bearing;
+  y += extent.y_bearing;
+
+  cairo_text_extents_t precedingExtent;
 
   if (charnum > 0) {
     // add the space taken up by the text which comes before charnum
     // to the position of the charnum character
-    pt.x += textRun->GetAdvanceWidth(0, charnum, nsnull);
+    cairo_text_extents(ctx,
+                       NS_ConvertUTF16toUTF8(Substring(text,
+                                                       0,
+                                                       charnum)).get(),
+                       &precedingExtent);
+
+    x += precedingExtent.x_advance;
+    y += precedingExtent.y_advance;
   }
 
-  return NS_NewSVGRect(_retval, metrics.mBoundingBox + pt);
+  return NS_NewSVGRect(_retval, x, y, extent.width, extent.height);
 }
 
 NS_IMETHODIMP
 nsSVGGlyphFrame::GetRotationOfChar(PRUint32 charnum, float *_retval)
 {
-  const gfxFloat radPerDeg = M_PI/180.0;
+  const double radPerDeg = M_PI/180.0;
 
   nsAutoString text;
   GetCharacterData(text);
@@ -936,9 +923,9 @@ nsSVGGlyphFrame::GetRotationOfChar(PRUint32 charnum, float *_retval)
       return NS_ERROR_DOM_INDEX_SIZE_ERR;
     }
 
-    *_retval = float(cp[charnum].angle / radPerDeg);
+    *_retval = cp[charnum].angle / radPerDeg;
   } else {
-    *_retval = 0.0f;
+    *_retval = 0.0;
   }
   return NS_OK;
 }
@@ -947,38 +934,32 @@ NS_IMETHODIMP_(float)
 nsSVGGlyphFrame::GetBaselineOffset(PRUint16 baselineIdentifier)
 {
   float _retval;
+  cairo_font_extents_t extents;
 
-  nsAutoString text;
-  GetCharacterData(text);
+  nsSVGAutoGlyphHelperContext ctx(this);
 
-  nsSVGAutoGlyphHelperContext ctx(this, text);
-  gfxTextRun *textRun = ctx.GetTextRun();
-  if (!textRun)
-    return 0.0f;
-
-  gfxTextRun::Metrics metrics =
-    textRun->MeasureText(0, text.Length(), PR_FALSE, nsnull);
+  cairo_font_extents(ctx, &extents);
 
   switch (baselineIdentifier) {
   case BASELINE_HANGING:
     // not really right, but the best we can do with the information provided
     // FALLTHROUGH
   case BASELINE_TEXT_BEFORE_EDGE:
-    _retval = -float(metrics.mAscent);
+    _retval = -extents.ascent;
     break;
   case BASELINE_TEXT_AFTER_EDGE:
-    _retval = float(metrics.mDescent);
+    _retval = extents.descent;
     break;
   case BASELINE_CENTRAL:
   case BASELINE_MIDDLE:
-    _retval = -float(metrics.mAscent - metrics.mDescent) / 2.0f;
+    _retval = - (extents.ascent - extents.descent) / 2.0;
     break;
   case BASELINE_ALPHABETIC:
   default:
-    _retval = 0.0f;
+    _retval = 0.0;
     break;
   }
-
+  
   return _retval;
 }
 
@@ -990,12 +971,14 @@ nsSVGGlyphFrame::GetAdvance()
     return 0.0f;
   }
 
-  nsSVGAutoGlyphHelperContext ctx(this, text);
-  gfxTextRun *textRun = ctx.GetTextRun();
-  if (!textRun)
-    return 0.0f;
+  nsSVGAutoGlyphHelperContext ctx(this);
 
-  return float(textRun->GetAdvanceWidth(0, text.Length(), nsnull));
+  cairo_text_extents_t extents;
+  cairo_text_extents(ctx, 
+                     NS_ConvertUTF16toUTF8(text).get(),
+                     &extents);
+  
+  return extents.x_advance;
 }
 
 NS_IMETHODIMP_(nsSVGTextPathFrame*) 
@@ -1123,7 +1106,19 @@ nsSVGGlyphFrame::GetNumberOfChars()
 NS_IMETHODIMP_(float)
 nsSVGGlyphFrame::GetComputedTextLength()
 {
-  return GetAdvance();
+  nsAutoString text;
+  if (!GetCharacterData(text)) {
+    return 0.0f;
+  }
+
+  nsSVGAutoGlyphHelperContext ctx(this);
+
+  cairo_text_extents_t extent;
+  cairo_text_extents(ctx,
+                     NS_ConvertUTF16toUTF8(text).get(),
+                     &extent);
+
+  return fabs(extent.x_advance) + fabs(extent.y_advance);
 }
 
 NS_IMETHODIMP_(float)
@@ -1132,12 +1127,14 @@ nsSVGGlyphFrame::GetSubStringLength(PRUint32 charnum, PRUint32 fragmentChars)
   nsAutoString text;
   GetCharacterData(text);
 
-  nsSVGAutoGlyphHelperContext ctx(this, text);
-  gfxTextRun *textRun = ctx.GetTextRun();
-  if (!textRun)
-    return 0.0f;
+  nsSVGAutoGlyphHelperContext ctx(this);
 
-  return float(textRun->GetAdvanceWidth(charnum, fragmentChars, nsnull));
+  cairo_text_extents_t extent;
+  cairo_text_extents(ctx,
+                     NS_ConvertUTF16toUTF8(Substring(text, charnum, fragmentChars)).get(),
+                     &extent);
+
+  return fabs(extent.x_advance) + fabs(extent.y_advance);
 }
 
 NS_IMETHODIMP_(PRInt32)
@@ -1154,48 +1151,55 @@ nsSVGGlyphFrame::GetCharNumAtPosition(nsIDOMSVGPoint *point)
 
   nsSVGAutoGlyphHelperContext ctx(this, text, getter_Transfers(cp));
 
-  gfxPoint pt;
+  float x, y;
   if (!cp) {
-    pt = mPosition;
+    x = mX;
+    y = mY;
   }
-
-  gfxContext *gfx = ctx.GetContext();
-  gfxTextRun *textRun = ctx.GetTextRun();
-  if (!gfx || !textRun)
-    return NS_ERROR_OUT_OF_MEMORY;
 
   for (PRUint32 charnum = 0; charnum < text.Length(); charnum++) {
     /* character actually on the path? */
     if (cp && cp[charnum].draw == PR_FALSE)
       continue;
 
-    gfxMatrix matrix = gfx->CurrentMatrix();
-    gfx->NewPath();
+    cairo_matrix_t matrix;
+    cairo_get_matrix(ctx, &matrix);
+    cairo_new_path(ctx);
 
     if (cp) {
-      gfx->MoveTo(cp[charnum].pos);
-      gfx->Rotate(cp[charnum].angle);
+      cairo_move_to(ctx, cp[charnum].x, cp[charnum].y);
+      cairo_rotate(ctx, cp[charnum].angle);
     } else {
       if (charnum > 0) {
-        gfx->MoveTo(pt + gfxPoint(textRun->GetAdvanceWidth(0, charnum, nsnull),
-                                  0));
+        cairo_text_extents_t extent;
+
+        cairo_text_extents(ctx,
+                           NS_ConvertUTF16toUTF8(Substring(text,
+                                                           0,
+                                                           charnum)).get(),
+                           &extent);
+        cairo_move_to(ctx, x + extent.x_advance, y + extent.y_advance);
       } else {
-        gfx->MoveTo(pt);
+        cairo_move_to(ctx, x, y);
       }
     }
+    cairo_text_extents_t extent;
+    cairo_text_extents(ctx,
+                       NS_ConvertUTF16toUTF8(Substring(text, charnum, 1)).get(),
+                       &extent);
 
-    gfxTextRun::Metrics metrics =
-      textRun->MeasureText(charnum, 1, PR_FALSE, nsnull);
+    cairo_rel_move_to(ctx, extent.x_bearing, extent.y_bearing);
+    cairo_rel_line_to(ctx, extent.width, 0);
+    cairo_rel_line_to(ctx, 0, extent.height);
+    cairo_rel_line_to(ctx, -extent.width, 0);
+    cairo_close_path(ctx);
 
-    gfx->Rectangle(metrics.mBoundingBox + gfx->CurrentPoint());
-
-    gfx->IdentityMatrix();
-    if (gfx->PointInFill(gfxPoint(xPos, yPos))) {
-      gfx->SetMatrix(matrix);
+    cairo_identity_matrix(ctx);
+    if (cairo_in_fill(ctx, xPos, yPos)) {
       return charnum;
     }
 
-    gfx->SetMatrix(matrix);
+    cairo_set_matrix(ctx, &matrix);
   }
   return -1;
 }
@@ -1234,6 +1238,69 @@ nsSVGGlyphFrame::SetWhitespaceHandling(PRUint8 aWhitespaceHandling)
 
 //----------------------------------------------------------------------
 //
+
+void nsSVGGlyphFrame::SelectFont(cairo_t *ctx)
+{
+  const nsStyleFont* fontData = GetStyleFont();
+  nsFont font = fontData->mFont;
+
+  // XXX eventually we will have to treat decorations separately from
+  // fonts, because they can have a different color than the current
+  // glyph.
+  
+  NS_ASSERTION(mParent, "no parent");
+  nsStyleContext *parentContext = mParent->GetStyleContext();
+  NS_ASSERTION(parentContext, "no style context on parent");
+  
+  PRUint8 styleDecorations =
+    parentContext->GetStyleTextReset()->mTextDecoration;
+  if (styleDecorations & NS_STYLE_TEXT_DECORATION_UNDERLINE)
+    font.decorations |= NS_FONT_DECORATION_UNDERLINE;
+  if (styleDecorations & NS_STYLE_TEXT_DECORATION_OVERLINE)
+    font.decorations |= NS_FONT_DECORATION_OVERLINE;
+  if (styleDecorations & NS_STYLE_TEXT_DECORATION_LINE_THROUGH)
+    font.decorations |= NS_FONT_DECORATION_LINE_THROUGH;    
+  
+  cairo_font_slant_t slant;
+  cairo_font_weight_t weight = CAIRO_FONT_WEIGHT_NORMAL;
+
+  switch (font.style) {
+  case NS_FONT_STYLE_NORMAL:
+    slant = CAIRO_FONT_SLANT_NORMAL;
+    break;
+  case NS_FONT_STYLE_ITALIC:
+    slant = CAIRO_FONT_SLANT_ITALIC;
+    break;
+  case NS_FONT_STYLE_OBLIQUE:
+    slant = CAIRO_FONT_SLANT_OBLIQUE;
+    break;
+  }
+
+  if (font.weight % 100 == 0) {
+    if (font.weight >= 600)
+      weight = CAIRO_FONT_WEIGHT_BOLD;
+  } else if (font.weight % 100 < 50) {
+    weight = CAIRO_FONT_WEIGHT_BOLD;
+  }
+
+  nsAutoString family;
+  font.GetFirstFamily(family);
+  cairo_select_font_face(ctx,
+                         NS_ConvertUTF16toUTF8(family).get(),
+                         slant,
+                         weight);
+
+  // Since SVG has its own scaling, we really don't want
+  // fonts in SVG to respond to the browser's "TextZoom"
+  // (Ctrl++,Ctrl+-)
+  nsPresContext *presContext = PresContext();
+  float pxPerTwips = presContext->TwipsToPixels();
+  float pixelScale;
+  presContext->DeviceContext()->GetCanonicalPixelScale(pixelScale);
+  float textZoom = presContext->TextZoom();
+
+  cairo_set_font_size(ctx, fontData->mSize * pxPerTwips / pixelScale / textZoom);
+}
 
 void nsSVGGlyphFrame::UpdateGeometry(PRBool bRedraw,
                                      PRBool suppressInvalidation)
@@ -1279,89 +1346,74 @@ nsSVGGlyphFrame::ContainsPoint(float x, float y)
   nsAutoArrayPtr<nsSVGCharacterPosition> cp;
 
   nsSVGAutoGlyphHelperContext ctx(this, text, getter_Transfers(cp));
-  gfxContext *gfx = ctx.GetContext();
-  gfxTextRun *textRun = ctx.GetTextRun();
-  if (!gfx || !textRun)
-    return NS_ERROR_OUT_OF_MEMORY;
 
-  nsresult rv = GetGlobalTransform(gfx);
+  nsresult rv = GetGlobalTransform(ctx, nsnull);
   NS_ENSURE_SUCCESS(rv, PR_FALSE);
 
-  gfxPoint pt;
+  float xx = 0, yy = 0;
   if (!cp) {
-    pt = mPosition;
+    xx = mX;
+    yy = mY;
   }
+
+  cairo_matrix_t matrix;
 
   for (PRUint32 i = 0; i < text.Length(); i++) {
     /* character actually on the path? */
     if (cp && cp[i].draw == PR_FALSE)
       continue;
 
-    gfxMatrix matrix = gfx->CurrentMatrix();
+    cairo_get_matrix(ctx, &matrix);
 
     if (cp) {
-      gfx->MoveTo(cp[i].pos);
-      gfx->Rotate(cp[i].angle);
+      cairo_move_to(ctx, cp[i].x, cp[i].y);
+      cairo_rotate(ctx, cp[i].angle);
     } else {
-      gfx->MoveTo(pt);
+      cairo_move_to(ctx, xx, yy);
     }
 
-    gfxTextRun::Metrics metrics =
-      textRun->MeasureText(i, 1, PR_FALSE, nsnull);
+    cairo_text_extents_t extent;
+    cairo_text_extents(ctx,
+                       NS_ConvertUTF16toUTF8(Substring(text, i, 1)).get(),
+                       &extent);
+    cairo_rel_move_to(ctx, extent.x_bearing, extent.y_bearing);
+    cairo_rel_line_to(ctx, extent.width, 0);
+    cairo_rel_line_to(ctx, 0, extent.height);
+    cairo_rel_line_to(ctx, -extent.width, 0);
+    cairo_close_path(ctx);
 
-    gfx->Rectangle(metrics.mBoundingBox + gfx->CurrentPoint());
-
-    gfx->SetMatrix(matrix);
+    cairo_set_matrix(ctx, &matrix);
 
     if (!cp) {
-      pt.x += metrics.mAdvanceWidth;
+      xx += extent.x_advance;
+      yy += extent.y_advance;
     }
   }
 
-  gfx->IdentityMatrix();
-  return gfx->PointInFill(gfxPoint(x, y));
+  cairo_identity_matrix(ctx);
+  return cairo_in_fill(ctx, x, y);
 }
 
 nsresult
-nsSVGGlyphFrame::GetGlobalTransform(gfxContext *aContext)
+nsSVGGlyphFrame::GetGlobalTransform(cairo_t *ctx,
+                                    nsISVGCairoCanvas* aCanvas)
 {
   nsCOMPtr<nsIDOMSVGMatrix> ctm;
   GetCanvasTM(getter_AddRefs(ctm));
   NS_ASSERTION(ctm, "graphic source didn't specify a ctm");
 
-  gfxMatrix matrix = nsSVGUtils::ConvertSVGMatrixToThebes(ctm);
+  cairo_matrix_t matrix = nsSVGUtils::ConvertSVGMatrixToCairo(ctm);
+  if (aCanvas) {
+    aCanvas->AdjustMatrixForInitialTransform(&matrix);
+  }
 
-  if (matrix.IsSingular()) {
-    aContext->IdentityMatrix();
+  if (nsSVGUtils::IsSingular(&matrix)) {
+    cairo_identity_matrix(ctx);
     return NS_ERROR_FAILURE;
   }
 
-  aContext->Multiply(matrix);
-
+  cairo_set_matrix(ctx, &matrix);
   return NS_OK;
-}
-
-gfxTextRun *
-nsSVGGlyphFrame::GetTextRun(gfxContext *aCtx, const nsString &aText)
-{
-  // XXX: should really pass in GetPresContext()->AppUnitsPerDevPixel()
-  // instead of "1" and do the appropriate unit conversions when sending
-  // coordinates into thebes and pulling metrics out.
-  //
-  // References:
-  //   https://bugzilla.mozilla.org/show_bug.cgi?id=375141
-  //   http://weblogs.mozillazine.org/roc/archives/2007/03/text_text_text.html
-
-  gfxTextRunFactory::Parameters params =
-    { aCtx, nsnull, nsnull,
-      nsnull, nsnull, nsnull,
-      1, // see note above
-      0 };
-
-  if (!mFontGroup)
-    return nsnull;
-
-  return mFontGroup->MakeTextRun(aText.get(), aText.Length(), &params);
 }
 
 //----------------------------------------------------------------------
@@ -1369,10 +1421,10 @@ nsSVGGlyphFrame::GetTextRun(gfxContext *aCtx, const nsString &aText)
 
 nsSVGGlyphFrame::nsSVGAutoGlyphHelperContext::nsSVGAutoGlyphHelperContext(
     nsSVGGlyphFrame *aSource,
-    const nsString &aText,
+    const nsAString &aText,
     nsSVGCharacterPosition **cp)
 {
-  Init(aSource, aText);
+  Init(aSource);
 
   nsresult rv = aSource->GetCharacterPosition(mCT, aText, cp);
   if NS_FAILED(rv) {
@@ -1380,10 +1432,8 @@ nsSVGGlyphFrame::nsSVGAutoGlyphHelperContext::nsSVGAutoGlyphHelperContext(
   }
 }
 
-void
-nsSVGGlyphFrame::nsSVGAutoGlyphHelperContext::Init(nsSVGGlyphFrame *aSource,
-                                                   const nsString &aText)
+void nsSVGGlyphFrame::nsSVGAutoGlyphHelperContext::Init(nsSVGGlyphFrame *aSource)
 {
-  mCT = new gfxContext(nsSVGUtils::GetThebesComputationalSurface());
-  mTextRun = aSource->GetTextRun(mCT, aText);
+  mCT = cairo_create(nsSVGUtils::GetCairoComputationalSurface());
+  aSource->SelectFont(mCT);
 }

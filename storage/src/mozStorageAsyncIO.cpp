@@ -250,6 +250,9 @@
 #include "sqlite3.h"
 #include "sqlite3file.h"
 
+#define PRINT32_MIN(x,y)     ((x)<(y)?(x): (PRInt32) (y))
+#define PRINT32_MAX(x,y)     ((x)>(y)?(x): (PRInt32) (y))
+
 // See below for some discussion on this. This will let us use a reader
 // filehandle and a writer filehandle so that read operations are not blocked
 // by asychronous writes.
@@ -1166,9 +1169,9 @@ AsyncRead(OsFile* aFile, void *aBuffer, int aCount)
         //                                              [=============]
         //                                              ^- p.mOffset
         //                                              <----------> copycount
-        PRInt32 beginIn = PR_MAX(0, blockOffset - p->mOffset);
-        PRInt32 beginOut = PR_MAX(0, p->mOffset - blockOffset);
-        PRInt32 copycount = PR_MIN(p->mBytes - beginIn, aCount - beginOut);
+        PRInt32 beginIn = PRINT32_MAX(0, blockOffset - p->mOffset);
+        PRInt32 beginOut = PRINT32_MAX(0, p->mOffset - blockOffset);
+        PRInt32 copycount = PRINT32_MIN(p->mBytes - beginIn, aCount - beginOut);
 
         if (copycount > 0) {
           memcpy(&NS_STATIC_CAST(char*, aBuffer)[beginOut],

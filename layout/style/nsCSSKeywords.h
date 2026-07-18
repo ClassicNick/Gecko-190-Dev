@@ -41,6 +41,7 @@
 #define nsCSSKeywords_h___
 
 #include "nsStringFwd.h"
+#include "nsIFrame.h"
 
 /*
    Declare the enum list using the magic of preprocessing

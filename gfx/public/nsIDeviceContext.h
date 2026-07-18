@@ -223,13 +223,6 @@ public:
   NS_IMETHOD  Init(nsNativeWidget aWidget) = 0;
 
   /**
-   * Initialize the device context from a device context spec
-   * @param aDevSpec the specification of the printng device (platform-specific)
-   * @return error status
-   */
-  NS_IMETHOD  InitForPrinting(nsIDeviceContextSpec* aDevSpec) = 0;
-
-  /**
    * Create a rendering context and initialize it from an nsIView
    * @param aView view to initialize context from
    * @param aContext out parameter for new rendering context
@@ -288,22 +281,84 @@ public:
   NS_IMETHOD PrepareNativeWidget(nsIWidget* aWidget, void** aOut) = 0;
 
   /**
-   * Gets the number of app units in one CSS pixel; this number is global,
-   * not unique to each device context.
+   * Obtain the size of a device unit relative to a Twip. A twip is 1/20 of
+   * a point (which is 1/72 of an inch).
+   * @return conversion value
    */
-  static PRInt32 AppUnitsPerCSSPixel() { return 60; }
+  float DevUnitsToTwips() const { return mPixelsToTwips; }
 
   /**
-   * Gets the number of app units in one device pixel; this number is usually
-   * a factor of AppUnitsPerCSSPixel(), although that is not guaranteed.
+   * Obtain the size of a Twip relative to a device unit.
+   * @return conversion value
    */
-  PRInt32 AppUnitsPerDevPixel() const { return mAppUnitsPerDevPixel; }
+  float TwipsToDevUnits() const { return mTwipsToPixels; }
 
   /**
-   * Gets the number of app units in one inch; this is the device's DPI
-   * times AppUnitsPerDevPixel().
+   * Set the scale factor to convert units used by the application
+   * to device units. Typically, an application will query the device
+   * for twips to device units scale and then set the scale
+   * to convert from whatever unit the application wants to use
+   * to device units. From that point on, all other parts of the
+   * app can use the Get* methods below to figure out how
+   * to convert device units <-> app units.
+   * @param aAppUnits scale value to convert from application defined
+   *        units to device units.
    */
-  PRInt32 AppUnitsPerInch() const { return mAppUnitsPerInch; }
+  void SetAppUnitsToDevUnits(float aAppUnits)
+  {
+    mAppUnitsToDevUnits = aAppUnits;
+  }
+
+  /**
+   * Set the scale factor to convert device units to units
+   * used by the application. This should generally be
+   * 1.0f / the value passed into SetAppUnitsToDevUnits().
+   * @param aDevUnits scale value to convert from device units to
+   *        application defined units
+   */
+  void SetDevUnitsToAppUnits(float aDevUnits)
+  {
+    mDevUnitsToAppUnits = aDevUnits;
+  }
+
+  /**
+   * Get the scale factor to convert from application defined
+   * units to device units.
+   * @param aAppUnits scale value
+   */
+  float AppUnitsToDevUnits() const { return mAppUnitsToDevUnits; }
+
+  /**
+   * Get the scale factor to convert from device units to
+   * application defined units.
+   * @param aDevUnits out paramater for scale value
+   * @return error status
+   */
+  float DevUnitsToAppUnits() const { return mDevUnitsToAppUnits; }
+
+  /**
+   * Get the value used to scale a "standard" pixel to a pixel
+   * of the same physical size for this device. a standard pixel
+   * is defined as a pixel on display 0. this is used to make
+   * sure that entities defined in pixel dimensions maintain a
+   * constant relative size when displayed from one output
+   * device to another.
+   * @param aScale out parameter for scale value
+   * @return error status
+   */
+  NS_IMETHOD  GetCanonicalPixelScale(float &aScale) const = 0;
+
+  /**
+   * Get the value used to scale a "standard" pixel to a pixel
+   * of the same physical size for this device. a standard pixel
+   * is defined as a pixel on display 0. this is used to make
+   * sure that entities defined in pixel dimensions maintain a
+   * constant relative size when displayed from one output
+   * device to another.
+   * @param aScale in parameter for scale value
+   * @return error status
+   */
+  NS_IMETHOD  SetCanonicalPixelScale(float aScale) = 0;
 
   /**
    * Fill in an nsFont based on the ID of a system font.  This function
@@ -377,7 +432,7 @@ public:
    * @param aHeight out parameter for height
    * @return error status
    */
-  NS_IMETHOD GetDeviceSurfaceDimensions(nscoord &aWidth, nscoord &aHeight) = 0;
+  NS_IMETHOD GetDeviceSurfaceDimensions(PRInt32 &aWidth, PRInt32 &aHeight) = 0;
 
   /**
    * Get the size of the content area of the output device in app units.
@@ -399,6 +454,19 @@ public:
    * @return error status
    */
   NS_IMETHOD GetClientRect(nsRect &aRect) = 0;
+
+  /**
+   * Returns a new nsIDeviceContext suitable for the device context
+   * specification passed in.
+   * @param aDevice a device context specification. this is a platform
+   *        specific structure that only a platform specific device
+   *        context can interpret.
+   * @param aContext out parameter for new device context. nsnull on
+   *        failure to create new device context.
+   * @return error status
+   */
+  NS_IMETHOD GetDeviceContextFor(nsIDeviceContextSpec *aDevice,
+                                 nsIDeviceContext *&aContext) = 0;
 
   /**
    * This is enables the DeviceContext to anything it needs to do for Printing
@@ -462,6 +530,25 @@ public:
    */
   NS_IMETHOD EndPage(void) = 0;
 
+#ifdef NS_PRINT_PREVIEW
+  /**
+   * Set an Alternative Device Context where some of the calls
+   * are deferred to it
+   */
+  NS_IMETHOD SetAltDevice(nsIDeviceContext* aAltDC) = 0;
+
+  /**
+   * Get the Alternate Device Context
+   */
+  NS_IMETHOD GetAltDevice(nsIDeviceContext** aAltDC) = 0;
+
+  /**
+   * Turn on/off which types of information is retrieved 
+   * via the alt device context
+   */
+  NS_IMETHOD SetUseAltDC(PRUint8 aValue, PRBool aOn) = 0;
+#endif
+
   /**
    * Clear cached system fonts (refresh from theme when
    * requested).  This method is effectively static,
@@ -471,16 +558,20 @@ public:
    */
   NS_IMETHOD ClearCachedSystemFonts() = 0;
 
+#ifdef MOZ_CAIRO_GFX
   /**
    * Check to see if the DPI has changed
    * @return whether there was actually a change in the DPI
    *         (whether AppUnitsPerDevPixel() or AppUnitsPerInch() changed)
   */
   virtual PRBool CheckDPIChange() = 0;
+#endif
 
 protected:
-  PRInt32 mAppUnitsPerDevPixel;
-  PRInt32 mAppUnitsPerInch;
+  float mTwipsToPixels;
+  float mPixelsToTwips;
+  float mAppUnitsToDevUnits;
+  float mDevUnitsToAppUnits;
 };
 
 NS_DEFINE_STATIC_IID_ACCESSOR(nsIDeviceContext, NS_IDEVICE_CONTEXT_IID)

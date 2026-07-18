@@ -37,6 +37,7 @@
 #ifndef nsHistory_h___
 #define nsHistory_h___
 
+#include "nsISupportsUtils.h"
 #include "nsIDOMHistory.h"
 #include "nsIDOMNSHistory.h"
 #include "nsISupports.h"

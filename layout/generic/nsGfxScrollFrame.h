@@ -125,12 +125,12 @@ public:
     nsGfxScrollFrameInner *mInner;
   };
 
-  static void FinishReflowForScrollbar(nsIContent* aContent, nscoord aMinXY,
+  void FinishReflowForScrollbar(nsIContent* aContent, nscoord aMinXY,
                                        nscoord aMaxXY, nscoord aCurPosXY,
                                        nscoord aPageIncrement,
                                        nscoord aIncrement);
   static void SetScrollbarEnabled(nsIContent* aContent, nscoord aMaxPos);
-  static void SetCoordAttribute(nsIContent* aContent, nsIAtom* aAtom,
+  void SetCoordAttribute(nsIContent* aContent, nsIAtom* aAtom,
                                 nscoord aSize);
   nscoord GetCoordAttribute(nsIBox* aFrame, nsIAtom* atom, nscoord defaultValue);
 
@@ -194,6 +194,7 @@ public:
   nsIFrame* mScrolledFrame;
   nsIBox* mScrollCornerBox;
   nsContainerFrame* mOuter;
+  nscoord mOnePixel;
 
   nsRect mRestoreRect;
   nsPoint mLastPos;

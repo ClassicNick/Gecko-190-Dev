@@ -67,7 +67,7 @@ public:
 
 private:
     nsAutoPtr<txResultBuffer> mBuffer;
-    nsAutoPtr<const txXPathNode> mNode;
+    const txXPathNode* mNode;
 };
 
 class txRtfHandler : public txBufferingHandler

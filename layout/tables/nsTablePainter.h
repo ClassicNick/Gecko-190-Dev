@@ -239,6 +239,7 @@ class TableBackgroundPainter
 
     nsStyleBorder        mZeroBorder;  //cached zero-width border
     nsStylePadding       mZeroPadding; //cached zero-width padding
+    float                mP2t;         //pixels to twips
 
 };
 

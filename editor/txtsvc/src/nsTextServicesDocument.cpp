@@ -38,6 +38,7 @@
  * ***** END LICENSE BLOCK ***** */
 
 #include "nscore.h"
+#include "nsCOMPtr.h"
 #include "nsLayoutCID.h"
 #include "nsIAtom.h"
 #include "nsStaticAtom.h"

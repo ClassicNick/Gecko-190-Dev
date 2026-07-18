@@ -318,8 +318,13 @@ static LRESULT CALLBACK PluginWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
       // Make sure setfocus and killfocus get through
       // even if they are eaten by the plugin
       WNDPROC prevWndProc = win->GetPrevWindowProc();
+	  #if defined (_MSC_VER) && _MSC_VER <= 1100
       if (prevWndProc)
+        ::CallWindowProc(((int (_stdcall*)(void)) prevWndProc), hWnd, msg, wParam, lParam);
+#else
+	  if (prevWndProc)
         ::CallWindowProc(prevWndProc, hWnd, msg, wParam, lParam);
+#endif
       break;
     }
 #endif
@@ -350,9 +355,15 @@ static LRESULT CALLBACK PluginWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
 
   sInMessageDispatch = PR_TRUE;
 
+  #if defined (_MSC_VER) && _MSC_VER <= 1100
+  NS_TRY_SAFE_CALL_RETURN(res, 
+                          ::CallWindowProc(((int (_stdcall*)(void)) (WNDPROC)win->GetWindowProc()), hWnd, msg, wParam, lParam),
+                          nsnull, inst);
+#else
   NS_TRY_SAFE_CALL_RETURN(res, 
                           ::CallWindowProc((WNDPROC)win->GetWindowProc(), hWnd, msg, wParam, lParam),
                           nsnull, inst);
+#endif
 
   sInMessageDispatch = PR_FALSE;
 
@@ -427,12 +438,21 @@ NS_IMETHODIMP PluginWindowEvent::Run()
 
   nsCOMPtr<nsIPluginInstance> inst;
   win->GetPluginInstance(inst);
+#if defined (_MSC_VER) && _MSC_VER <= 1100
+  NS_TRY_SAFE_CALL_VOID(::CallWindowProc(((int (_stdcall*)(void)) win->GetWindowProc()), 
+                        hWnd, 
+                        GetMsg(), 
+                        GetWParam(), 
+                        GetLParam()),
+                        nsnull, inst);
+#else
   NS_TRY_SAFE_CALL_VOID(::CallWindowProc(win->GetWindowProc(), 
                         hWnd, 
                         GetMsg(), 
                         GetWParam(), 
                         GetLParam()),
                         nsnull, inst);
+#endif
   Clear();
   return NS_OK;
 }

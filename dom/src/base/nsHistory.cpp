@@ -57,6 +57,7 @@
 #include "nsReadableUtils.h"
 #include "nsDOMClassInfo.h"
 #include "nsContentUtils.h"
+#include "nsIFrame.h"
 
 //
 //  History class implementation 

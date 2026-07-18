@@ -37,6 +37,7 @@
 #ifndef __NS_SVGUSEELEMENT_H__
 #define __NS_SVGUSEELEMENT_H__
 
+#include "nsCOMPtr.h"
 #include "nsIDOMSVGAnimatedString.h"
 #include "nsIDOMSVGURIReference.h"
 #include "nsIDOMSVGUseElement.h"

@@ -428,7 +428,7 @@ nsHTMLScrollFrame::ReflowScrolledFrame(const ScrollReflowState& aState,
   }
   // pixel align the content
   nsPresContext* presContext = PresContext();
-  nscoord twp = nsPresContext::CSSPixelsToAppUnits(1);
+  nscoord twp = presContext->IntScaledPixelsToTwips(1);
   availWidth -=  availWidth % twp;
 
   if (!aFirstPass)
@@ -1230,6 +1230,7 @@ nsGfxScrollFrameInner::nsGfxScrollFrameInner(nsContainerFrame* aOuter,
     mScrolledFrame(nsnull),
     mScrollCornerBox(nsnull),
     mOuter(aOuter),
+    mOnePixel(20),
     mRestoreRect(-1, -1, -1, -1),
     mLastPos(-1, -1),
     mNeverHasVerticalScrollbar(PR_FALSE),
@@ -2332,10 +2333,10 @@ nsGfxScrollFrameInner::FinishReflowForScrollbar(nsIContent* aContent,
 PRBool
 nsGfxScrollFrameInner::ReflowFinished()
 {
-  mPostedReflowCallback = PR_FALSE;
-
   // Update scrollbar attributes.
   nsPresContext* presContext = mOuter->PresContext();
+  mOnePixel = presContext->IntScaledPixelsToTwips(1);
+  mPostedReflowCallback = PR_FALSE;
 
   nsIScrollableView* scrollable = GetScrollableView();
   nsRect scrollArea = scrollable->View()->GetBounds();
@@ -2378,7 +2379,7 @@ nsGfxScrollFrameInner::ReflowFinished()
     if (hScroll) {
       FinishReflowForScrollbar(hScroll, minX, maxX, curPosX,
                                nscoord(float(scrollArea.width) * 0.8),
-                               nsPresContext::CSSPixelsToAppUnits(10));
+                               10*mOnePixel);
     }
     NS_ENSURE_TRUE(weakFrame.IsAlive(), PR_FALSE);
   }
@@ -2526,7 +2527,7 @@ nsGfxScrollFrameInner::SetCoordAttribute(nsIContent* aContent, nsIAtom* aAtom,
                                          nscoord aSize)
 {
   // convert to pixels
-  aSize = nsPresContext::AppUnitsToIntCSSPixels(aSize);
+  aSize /= mOnePixel;
 
   // only set the attribute if it changed.
 
@@ -2602,7 +2603,7 @@ nsGfxScrollFrameInner::GetCoordAttribute(nsIBox* aBox, nsIAtom* atom, PRInt32 de
       PRInt32 error;
 
       // convert it to an integer
-      defaultValue = nsPresContext::CSSPixelsToAppUnits(value.ToInteger(&error));
+      defaultValue = value.ToInteger(&error) * mOnePixel;
     }
   }
 

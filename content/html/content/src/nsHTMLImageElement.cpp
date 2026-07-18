@@ -52,10 +52,12 @@
 #include "nsIScriptContext.h"
 #include "nsIURL.h"
 #include "nsIIOService.h"
+#include "nsIURL.h"
 #include "nsIServiceManager.h"
 #include "nsNetUtil.h"
 #include "nsContentUtils.h"
 #include "nsIFrame.h"
+#include "nsIImageFrame.h"
 #include "nsNodeInfoManager.h"
 #include "nsGUIEvent.h"
 #include "nsContentPolicyUtils.h"
@@ -147,6 +149,7 @@ public:
   virtual nsresult Clone(nsINodeInfo *aNodeInfo, nsINode **aResult) const;
 
 protected:
+  void GetImageFrame(nsIImageFrame** aImageFrame);
   nsPoint GetXY();
   nsSize GetWidthHeight();
 };
@@ -216,6 +219,21 @@ NS_IMPL_URI_ATTR(nsHTMLImageElement, Src, src)
 NS_IMPL_STRING_ATTR(nsHTMLImageElement, UseMap, usemap)
 NS_IMPL_INT_ATTR(nsHTMLImageElement, Vspace, vspace)
 
+void
+nsHTMLImageElement::GetImageFrame(nsIImageFrame** aImageFrame)
+{
+  *aImageFrame = nsnull;
+  // If we have no parent, then we won't have a frame yet
+  if (!GetParent())
+    return;
+
+  nsIFrame* frame = GetPrimaryFrame(Flush_Frames);
+
+  if (frame) {
+    CallQueryInterface(frame, aImageFrame);
+  }
+}
+
 NS_IMETHODIMP
 nsHTMLImageElement::GetComplete(PRBool* aComplete)
 {
@@ -240,7 +258,29 @@ nsHTMLImageElement::GetXY()
 {
   nsPoint point(0, 0);
 
-  nsIFrame* frame = GetPrimaryFrame(Flush_Layout);
+  nsIDocument *document = GetCurrentDoc();
+
+  if (!document) {
+    return point;
+  }
+
+  // Get Presentation shell 0
+  nsIPresShell *presShell = document->GetShellAt(0);
+  if (!presShell) {
+    return point;
+  }
+
+  // Get the Presentation Context from the Shell
+  nsPresContext *context = presShell->GetPresContext();
+  if (!context) {
+    return point;
+  }
+
+  // Flush all pending notifications so that our frames are laid out correctly
+  document->FlushPendingNotifications(Flush_Layout);
+
+  // Get the Frame for this image
+  nsIFrame* frame = presShell->GetPrimaryFrameFor(this);
 
   if (!frame) {
     return point;
@@ -248,9 +288,14 @@ nsHTMLImageElement::GetXY()
 
   nsIFrame* layer = nsLayoutUtils::GetClosestLayer(frame->GetParent());
   nsPoint origin(frame->GetOffsetTo(layer));
+
+  // Get the scale from that Presentation Context
+  float scale;
+  scale = context->TwipsToPixels();
+
   // Convert to pixels using that scale
-  point.x = nsPresContext::AppUnitsToIntCSSPixels(origin.x);
-  point.y = nsPresContext::AppUnitsToIntCSSPixels(origin.y);
+  point.x = NSTwipsToIntPixels(origin.x, scale);
+  point.y = NSTwipsToIntPixels(origin.y, scale);
 
   return point;
 }
@@ -276,13 +321,37 @@ nsHTMLImageElement::GetWidthHeight()
 {
   nsSize size(0,0);
 
-  nsIFrame* frame = GetPrimaryFrame(Flush_Layout);
+  nsIDocument* doc = GetCurrentDoc();
+  if (doc) {
+    // Flush all pending notifications so that our frames are up to date.
+    // If we're not in a document, we don't have a frame anyway, so we
+    // don't care.
+    doc->FlushPendingNotifications(Flush_Layout);
+  }
+
+  nsIImageFrame* imageFrame;
+  GetImageFrame(&imageFrame);
+
+  nsIFrame* frame = nsnull;
+
+  if (imageFrame) {
+    CallQueryInterface(imageFrame, &frame);
+    NS_ASSERTION(frame,"Should not happen - image frame is not frame");
+  }
 
   if (frame) {
+    // XXX we could put an accessor on nsIImageFrame to return its
+    // mComputedSize.....
     size = frame->GetContentRect().Size();
 
-    size.width = nsPresContext::AppUnitsToIntCSSPixels(size.width);
-    size.height = nsPresContext::AppUnitsToIntCSSPixels(size.height);
+    nsPresContext *context = GetPresContext();
+    if (context) {
+      float t2p;
+      t2p = context->TwipsToPixels();
+
+      size.width = NSTwipsToIntPixels(size.width, t2p);
+      size.height = NSTwipsToIntPixels(size.height, t2p);
+    }
   } else {
     const nsAttrValue* value;
     nsCOMPtr<imgIContainer> image;

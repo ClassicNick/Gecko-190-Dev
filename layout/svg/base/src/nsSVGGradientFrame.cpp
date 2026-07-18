@@ -46,7 +46,6 @@
 #include "nsSVGGradientElement.h"
 #include "nsSVGGeometryFrame.h"
 #include "nsSVGGradientFrame.h"
-#include "gfxContext.h"
 #include "nsIDOMSVGRect.h"
 
 //----------------------------------------------------------------------
@@ -196,13 +195,11 @@ nsSVGGradientFrame::GetStopCount()
 
 void
 nsSVGGradientFrame::GetStopInformation(PRInt32 aIndex,
-                                       float *aOffset,
-                                       nscolor *aStopColor,
-                                       float *aStopOpacity)
+                                       float *aOffset, nscolor *aColor, float *aOpacity)
 {
   *aOffset = 0.0f;
-  *aStopColor = NS_RGBA(0, 0, 0, 0);
-  *aStopOpacity = 1.0f;
+  *aColor = 0;
+  *aOpacity = 1.0f;
 
   nsIFrame *stopFrame = nsnull;
   GetStopFrame(aIndex, &stopFrame);
@@ -221,8 +218,8 @@ nsSVGGradientFrame::GetStopInformation(PRInt32 aIndex,
   }
 
   if (stopFrame) {
-    *aStopColor   = stopFrame->GetStyleSVGReset()->mStopColor;
-    *aStopOpacity = stopFrame->GetStyleSVGReset()->mStopOpacity;
+    *aColor   = stopFrame->GetStyleSVGReset()->mStopColor;
+    *aOpacity = stopFrame->GetStyleSVGReset()->mStopOpacity;
   }
 #ifdef DEBUG
   // One way or another we have an implementation problem if we get here
@@ -330,10 +327,11 @@ nsSVGGradientFrame::GetSpreadMethod()
 //----------------------------------------------------------------------
 // nsSVGPaintServerFrame methods:
 
-PRBool
-nsSVGGradientFrame::SetupPaintServer(gfxContext *aContext,
+nsresult
+nsSVGGradientFrame::SetupPaintServer(nsISVGRendererCanvas *aCanvas,
+                                     cairo_t *aCtx,
                                      nsSVGGeometryFrame *aSource,
-                                     float aGraphicOpacity,
+                                     float aOpacity,
                                      void **aClosure)
 {
   *aClosure = nsnull;
@@ -343,21 +341,21 @@ nsSVGGradientFrame::SetupPaintServer(gfxContext *aContext,
   // SVG specification says that no stops should be treated like
   // the corresponding fill or stroke had "none" specified.
   if (nStops == 0)
-    return PR_FALSE;
+    return NS_ERROR_FAILURE;
 
   // Get the transform list (if there is one)
   nsCOMPtr<nsIDOMSVGMatrix> svgMatrix;
   GetGradientTransform(getter_AddRefs(svgMatrix), aSource);
   if (!svgMatrix)
-    return PR_FALSE;
+    return NS_ERROR_FAILURE;
 
   cairo_matrix_t patternMatrix = nsSVGUtils::ConvertSVGMatrixToCairo(svgMatrix);
   if (cairo_matrix_invert(&patternMatrix))
-    return PR_FALSE;
+    return NS_ERROR_FAILURE;
 
   cairo_pattern_t *gradient = CreateGradient();
   if (!gradient)
-    return PR_FALSE;
+    return NS_ERROR_FAILURE;
 
   PRUint16 aSpread = GetSpreadMethod();
   if (aSpread == nsIDOMSVGGradientElement::SVG_SPREADMETHOD_PAD)
@@ -373,10 +371,10 @@ nsSVGGradientFrame::SetupPaintServer(gfxContext *aContext,
   float lastOffset = 0.0f;
 
   for (PRUint32 i = 0; i < nStops; i++) {
-    float offset, stopOpacity;
-    nscolor stopColor;
+    float offset, opacity;
+    nscolor rgba;
 
-    GetStopInformation(i, &offset, &stopColor, &stopOpacity);
+    GetStopInformation(i, &offset, &rgba, &opacity);
 
     if (offset < lastOffset)
       offset = lastOffset;
@@ -384,21 +382,21 @@ nsSVGGradientFrame::SetupPaintServer(gfxContext *aContext,
       lastOffset = offset;
 
     cairo_pattern_add_color_stop_rgba(gradient, offset,
-                                      NS_GET_R(stopColor)/255.0,
-                                      NS_GET_G(stopColor)/255.0,
-                                      NS_GET_B(stopColor)/255.0,
-                                      NS_GET_A(stopColor)/255.0 *
-                                        stopOpacity * aGraphicOpacity);
+                                      NS_GET_R(rgba)/255.0,
+                                      NS_GET_G(rgba)/255.0,
+                                      NS_GET_B(rgba)/255.0,
+                                      NS_GET_A(rgba)/255.0 *
+                                        opacity * aOpacity);
   }
 
-  cairo_set_source(aContext->GetCairo(), gradient);
+  cairo_set_source(aCtx, gradient);
 
   *aClosure = gradient;
-  return PR_TRUE;
+  return NS_OK;
 }
 
 void
-nsSVGGradientFrame::CleanupPaintServer(gfxContext *aContext, void *aClosure)
+nsSVGGradientFrame::CleanupPaintServer(cairo_t *aCtx, void *aClosure)
 {
   cairo_pattern_t *gradient = NS_STATIC_CAST(cairo_pattern_t*, aClosure);
   cairo_pattern_destroy(gradient);

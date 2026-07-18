@@ -143,6 +143,9 @@
 #ifdef WIN32
 #include <io.h>
 #include <process.h>
+#ifndef _HOOK_FREE
+#define _HOOK_FREE      3
+#endif
 #endif
 
 #define DEFAULT_SHUTDOWN_COLLECTIONS 5
@@ -392,7 +395,7 @@ public:
         {
         }
 
-        EdgePool::Iterator Mark() { return EdgePool::Iterator(mCurrent); }
+        Iterator Mark() { return EdgePool::Iterator(mCurrent); }
 
         void Add(PtrInfo* aEdge) {
             if (mCurrent == mBlockEnd) {
@@ -412,7 +415,7 @@ public:
     private:
         // mBlockEnd points to space for null sentinel
         PtrInfoOrBlock *mCurrent, *mBlockEnd;
-        EdgePool::Block **mNextBlockPtr;
+        Block **mNextBlockPtr;
     };
 
 };
@@ -465,9 +468,10 @@ struct PtrInfo
  */
 class NodePool
 {
-private:
+public:
     enum { BlockSize = 32 * 1024 }; // could be int template parameter
 
+private:
     struct Block {
         Block* mNext;
         PtrInfo mEntries[BlockSize];
@@ -1335,8 +1339,10 @@ nsCycleCollector::CollectWhite(GCGraph &graph)
         mBufs[i].Empty();
 
 #if defined(DEBUG_CC) && !defined(__MINGW32__) && defined(WIN32)
+#if defined (_MSC_VER) && _MSC_VER >= 1200
     struct _CrtMemState ms1, ms2;
     _CrtMemCheckpoint(&ms1);
+#endif // _MSC_VER
 #endif
 
     NodePool::Enumerator etor(graph.mNodes);
@@ -1408,9 +1414,11 @@ nsCycleCollector::CollectWhite(GCGraph &graph)
         mBufs[i].Empty();
 
 #if defined(DEBUG_CC) && !defined(__MINGW32__) && defined(WIN32)
+#if defined (_MSC_VER) && _MSC_VER >= 1200
     _CrtMemCheckpoint(&ms2);
     if (ms2.lTotalCount < ms1.lTotalCount)
         mStats.mFreedBytes += (ms1.lTotalCount - ms2.lTotalCount);
+#endif // _MSC_VER
 #endif
 }
 
@@ -1931,7 +1939,8 @@ nsCycleCollector::Collect(PRUint32 aTryCollections)
 #ifdef COLLECT_TIME_DEBUG
         now = PR_Now();
 #endif
-        for (PRUint32 i = 0; i <= nsIProgrammingLanguage::MAX; ++i) {
+		PRUint32 i;
+        for (i = 0; i <= nsIProgrammingLanguage::MAX; ++i) {
             if (mRuntimes[i])
                 mRuntimes[i]->BeginCycleCollection();
         }
@@ -2023,7 +2032,7 @@ nsCycleCollector::Collect(PRUint32 aTryCollections)
             mCollectionInProgress = PR_FALSE;
         }
 
-        for (PRUint32 i = 0; i <= nsIProgrammingLanguage::MAX; ++i) {
+        for (i = 0; i <= nsIProgrammingLanguage::MAX; ++i) {
             if (mRuntimes[i])
                 mRuntimes[i]->FinishCycleCollection();
         }

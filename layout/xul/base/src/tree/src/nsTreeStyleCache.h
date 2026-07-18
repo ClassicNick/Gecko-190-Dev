@@ -40,10 +40,12 @@
 #ifndef nsTreeStyleCache_h__
 #define nsTreeStyleCache_h__
 
+#include "nsCOMPtr.h"
 #include "nsHashtable.h"
 #include "nsIAtom.h"
 #include "nsICSSPseudoComparator.h"
 #include "nsStyleContext.h"
+#include "nsIFrame.h"
 
 class nsDFAState : public nsHashKey
 {

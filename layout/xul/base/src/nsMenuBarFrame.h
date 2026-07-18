@@ -45,9 +45,9 @@
 #ifndef nsMenuBarFrame_h__
 #define nsMenuBarFrame_h__
 
+#include "nsCOMPtr.h"
 #include "prtypes.h"
 #include "nsIAtom.h"
-#include "nsCOMPtr.h"
 #include "nsBoxFrame.h"
 #include "nsMenuBarListener.h"
 #include "nsMenuListener.h"

@@ -5248,7 +5248,7 @@ nsBlockFrame::ReflowFloat(nsBlockReflowState& aState,
     // needed when prev. float has procentage width
     // (maybe is a table flaw that makes table chose to round up
     // but I don't want to change that, too risky)
-    nscoord twp = nsPresContext::CSSPixelsToAppUnits(1);
+    nscoord twp = aState.mPresContext->IntScaledPixelsToTwips(1);
     availWidth -=  availWidth % twp;
   }
 

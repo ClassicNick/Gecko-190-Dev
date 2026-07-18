@@ -139,7 +139,7 @@ nsMathMLmsubsupFrame::PlaceSubSupScript(nsPresContext*      aPresContext,
                                         nscoord              aScriptSpace)
 {
   // force the scriptSpace to be atleast 1 pixel
-  nscoord onePixel = nsPresContext::CSSPixelsToAppUnits(1);
+  nscoord onePixel = aPresContext->IntScaledPixelsToTwips(1);
   aScriptSpace = PR_MAX(onePixel, aScriptSpace);
 
   ////////////////////////////////////

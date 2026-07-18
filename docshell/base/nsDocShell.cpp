@@ -45,6 +45,7 @@
 #define FORCE_PR_LOG 1
 #endif
 
+#include "nsCOMPtr.h"
 #include "nsIBrowserDOMWindow.h"
 #include "nsIComponentManager.h"
 #include "nsIContent.h"
@@ -4964,6 +4965,12 @@ nsDocShell::EnsureDeviceContext()
     NS_ENSURE_TRUE(widget, NS_ERROR_FAILURE);
 
     mDeviceContext->Init(widget->GetNativeData(NS_NATIVE_WIDGET));
+    float dev2twip;
+    dev2twip = mDeviceContext->DevUnitsToTwips();
+    mDeviceContext->SetDevUnitsToAppUnits(dev2twip);
+    float twip2dev;
+    twip2dev = mDeviceContext->TwipsToDevUnits();
+    mDeviceContext->SetAppUnitsToDevUnits(twip2dev);
 
     return NS_OK;
 }

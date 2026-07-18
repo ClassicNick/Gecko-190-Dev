@@ -2052,8 +2052,8 @@ nsDownload::OnProgressChange64(nsIWebProgress *aWebProgress,
   // during that time for more accuracy.
   double elapsedSecs = double(delta) / PR_USEC_PER_SEC;
   if (elapsedSecs > 0) {
-    nsUint64 curTotalProgress = (PRUint64)aCurTotalProgress;
-    nsUint64 diffBytes = curTotalProgress - nsUint64(mCurrBytes);
+    PRInt64 curTotalProgress = (PRInt64)aCurTotalProgress;
+    PRInt64 diffBytes = curTotalProgress - PRInt64(mCurrBytes);
     double speed = double(diffBytes) / elapsedSecs;
     if (LL_IS_ZERO(mCurrBytes))
       mSpeed = speed;

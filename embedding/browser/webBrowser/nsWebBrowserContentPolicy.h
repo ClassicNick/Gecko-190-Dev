@@ -37,6 +37,7 @@
  * ***** END LICENSE BLOCK ***** */
 
 #include "nsIContentPolicy.h"
+#include "nsIFrame.h"
 
 /* f66bc334-1dd1-11b2-bab2-90e04fe15c19 */
 #define NS_WEBBROWSERCONTENTPOLICY_CID \

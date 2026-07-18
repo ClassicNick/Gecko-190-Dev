@@ -62,6 +62,8 @@ REQUIRES	+= unicharutil \
 		  xpconnect \
 		  js \
 		  htmlparser \
+		  gfx \
+		  locale \
 		  $(NULL)
 endif
 

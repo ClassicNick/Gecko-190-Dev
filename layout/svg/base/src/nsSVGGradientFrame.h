@@ -55,11 +55,12 @@ class nsSVGGradientFrame : public nsSVGGradientFrameBase,
 {
 public:
   // nsSVGPaintServerFrame methods:
-  virtual PRBool SetupPaintServer(gfxContext *aContext,
-                                  nsSVGGeometryFrame *aSource,
-                                  float aGraphicOpacity,
-                                  void **aClosure);
-  virtual void CleanupPaintServer(gfxContext *aContext, void *aClosure);
+  virtual nsresult SetupPaintServer(nsISVGRendererCanvas *aCanvas,
+                                    cairo_t *aCtx,
+                                    nsSVGGeometryFrame *aSource,
+                                    float aOpacity,
+                                    void **aClosure);
+  virtual void CleanupPaintServer(cairo_t *aCtx, void *aClosure);
 
   // nsISupports interface:
   NS_IMETHOD QueryInterface(const nsIID& aIID, void** aInstancePtr);
@@ -94,7 +95,7 @@ public:
 #endif // DEBUG
 
   // nsISVGChildFrame interface:
-  NS_IMETHOD PaintSVG(gfxContext* aContext)
+  NS_IMETHOD PaintSVG(nsISVGRendererCanvas* canvas)
   {
     return NS_OK;  // override - our frames don't directly render
   }
@@ -125,7 +126,7 @@ private:
   PRUint16 GetSpreadMethod();
   PRUint32 GetStopCount();
   void GetStopInformation(PRInt32 aIndex,
-                          float *aOffset, nscolor *aColor, float *aStopOpacity);
+                          float *aOffset, nscolor *aColor, float *aOpacity);
   nsresult GetGradientTransform(nsIDOMSVGMatrix **retval,
                                 nsSVGGeometryFrame *aSource);
 

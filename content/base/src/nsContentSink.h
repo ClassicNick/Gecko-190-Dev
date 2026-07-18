@@ -55,6 +55,7 @@
 #include "nsGkAtoms.h"
 #include "nsTHashtable.h"
 #include "nsHashKeys.h"
+#include "nsIFrame.h"
 #include "nsITimer.h"
 #include "nsStubDocumentObserver.h"
 #include "nsIParserService.h"

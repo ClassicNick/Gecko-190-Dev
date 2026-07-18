@@ -247,7 +247,7 @@ public:
    *  @param aPixelsToTwips - conversion factor
    *  @param aGetInner - get only inner half of border width
    */
-  nscoord GetContinuousLeftBCBorderWidth() const;
+  nscoord GetContinuousLeftBCBorderWidth(float aPixelsToTwips) const;
 
   void SetBCDamageArea(const nsRect& aValue);
 
@@ -846,9 +846,8 @@ inline void nsTableFrame::SetNeedToCalcBCBorders(PRBool aValue)
 }
 
 inline nscoord
-nsTableFrame::GetContinuousLeftBCBorderWidth() const
+nsTableFrame::GetContinuousLeftBCBorderWidth(float aPixelsToTwips) const
 {
-  PRInt32 aPixelsToTwips = nsPresContext::AppUnitsPerCSSPixel();
   return BC_BORDER_RIGHT_HALF_COORD(aPixelsToTwips, mBits.mLeftContBCBorder);
 }
 
@@ -878,5 +877,12 @@ return;}
 #define ABORT1(aReturn) \
 {NS_ASSERTION(PR_FALSE, "CellIterator program error"); \
 return aReturn;} 
+
+#define GET_PIXELS_TO_TWIPS(presContext,var) \
+  float var = (presContext)->ScaledPixelsToTwips();
+
+#define GET_TWIPS_TO_PIXELS(presContext,var) \
+  float var = (presContext)->ScaledPixelsToTwips(); \
+  var = 1.0f / var;
 
 #endif

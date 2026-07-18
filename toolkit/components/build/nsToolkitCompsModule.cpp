@@ -40,6 +40,7 @@
 #include "nsUserInfo.h"
 #include "nsXPFEComponentsCID.h"
 #include "nsToolkitCompsCID.h"
+#include "nsIFrame.h"
 #if defined(ALERTS_SERVICE) || defined(ALERTS_SERVICE_MAC)
 #include "nsAlertsService.h"
 #endif

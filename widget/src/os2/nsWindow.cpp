@@ -1663,7 +1663,12 @@ nsIFontMetrics *nsWindow::GetFont(void)
       // FACESIZE = 32, hence the 31 here
       if( 2 == sscanf( fontNameSize, "%d.%31s", &ptSize, fontName))
       {
-         nscoord appSize = NSToCoordRound(float(ptSize) * mContext->AppUnitsPerInch() / 72);
+         float twip2dev, twip2app;
+         twip2dev = mContext->TwipsToDevUnits();
+         twip2app = mContext->DevUnitsToAppUnits();
+         twip2app *= twip2dev;
+   
+         nscoord appSize = (nscoord) (twip2app * ptSize * 20);
    
          nsFont font( fontName, NS_FONT_STYLE_NORMAL, NS_FONT_VARIANT_NORMAL,
                       NS_FONT_WEIGHT_NORMAL, 0 /*decoration*/, appSize);
@@ -1686,7 +1691,11 @@ NS_METHOD nsWindow::SetFont(const nsFont &aFont)
    {
       // jump through hoops to convert the size in the font (in app units)
       // into points. 
-      int points = aFont.size * 72 / mContext->AppUnitsPerInch();
+      float dev2twip, app2twip;
+      dev2twip = mContext->DevUnitsToTwips();
+      app2twip = mContext->AppUnitsToDevUnits();
+      app2twip *= dev2twip;
+      int points = NSTwipsToFloorIntPoints( nscoord( aFont.size * app2twip));
 
       nsAutoCharBuffer fontname;
       PRInt32 fontnameLength;

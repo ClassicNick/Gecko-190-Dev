@@ -49,7 +49,6 @@ class nsIDOMSVGAnimatedPreserveAspectRatio;
 class nsIFrame;
 class nsSVGLength2;
 class nsSVGElement;
-class gfxContext;
 
 typedef nsSVGPaintServerFrame  nsSVGPatternFrameBase;
 
@@ -63,17 +62,18 @@ public:
 
   nsSVGPatternFrame(nsStyleContext* aContext) : nsSVGPatternFrameBase(aContext) {}
 
-  nsresult PaintPattern(cairo_surface_t **surface,
+  nsresult PaintPattern(nsISVGRendererCanvas *canvas,
+                        cairo_surface_t **surface,
                         nsIDOMSVGMatrix **patternMatrix,
-                        nsSVGGeometryFrame *aSource,
-                        float aGraphicOpacity);
+                        nsSVGGeometryFrame *aSource);
 
   // nsSVGPaintServerFrame methods:
-  virtual PRBool SetupPaintServer(gfxContext *aContext,
-                                  nsSVGGeometryFrame *aSource,
-                                  float aGraphicOpacity,
-                                  void **aClosure);
-  virtual void CleanupPaintServer(gfxContext *aContext, void *aClosure);
+  virtual nsresult SetupPaintServer(nsISVGRendererCanvas *aCanvas,
+                                    cairo_t *aCtx,
+                                    nsSVGGeometryFrame *aSource,
+                                    float aOpacity,
+                                    void **aClosure);
+  virtual void CleanupPaintServer(cairo_t *aCtx, void *aClosure);
 
   // nsISupports interface:
   NS_IMETHOD QueryInterface(const nsIID& aIID, void** aInstancePtr);
@@ -143,6 +143,7 @@ protected:
                               nsIDOMSVGRect *callerBBox,
                               nsIDOMSVGMatrix *callerCTM);
   nsresult   ConstructCTM(nsIDOMSVGMatrix **ctm, nsIDOMSVGRect *callerBBox);
+  cairo_surface_t *CreateSurface(nsIDOMSVGRect *bbox);
   nsresult   GetCallerGeometry(nsIDOMSVGMatrix **aCTM, 
                                nsIDOMSVGRect **aBBox,
                                nsSVGElement **aContent, 

@@ -163,8 +163,10 @@
 #include "nsEventDispatcher.h"
 #include "nsThreadUtils.h"
 #include "nsStyleSheetService.h"
+#ifdef MOZ_CAIRO_GFX
 #include "gfxImageSurface.h"
 #include "gfxContext.h"
+#endif
 
 // Drag & Drop, Clipboard
 #include "nsWidgetsCID.h"
@@ -925,6 +927,7 @@ public:
                              nscolor aBackgroundColor,
                              nsIRenderingContext** aRenderedContext);
 
+#ifdef MOZ_CAIRO_GFX
   virtual already_AddRefed<gfxASurface> RenderNode(nsIDOMNode* aNode,
                                                    nsIRegion* aRegion,
                                                    nsPoint& aPoint,
@@ -933,6 +936,7 @@ public:
   virtual already_AddRefed<gfxASurface> RenderSelection(nsISelection* aSelection,
                                                         nsPoint& aPoint,
                                                         nsRect* aScreenRect);
+#endif
 
   virtual void HidePopups();
 
@@ -1129,6 +1133,7 @@ protected:
                                        nsIRenderingContext* aRenderingContext,
                                        nsRect& aSurfaceRect);
 
+#ifdef MOZ_CAIRO_GFX
   /*
    * Paint the items to a new surface and return it.
    *
@@ -1146,6 +1151,7 @@ protected:
                       nsRect aArea,
                       nsPoint& aPoint,
                       nsRect* aScreenRect);
+#endif
 
   /**
    * Methods to handle changes to user and UA sheet lists that we get
@@ -4806,7 +4812,7 @@ PresShell::RenderOffscreen(nsRect aRect, PRBool aUntrusted,
     return NS_ERROR_FAILURE;
 
   nsRect bounds(nsPoint(0, 0), aRect.Size());
-  bounds.ScaleRoundOut(1.0f / mPresContext->AppUnitsPerDevPixel());
+  bounds.ScaleRoundOut(mPresContext->TwipsToPixels());
   
   nsIDrawingSurface* surface;
   nsresult rv
@@ -5031,6 +5037,7 @@ PresShell::CreateRangePaintInfo(nsIDOMRange* aRange,
   return info;
 }
 
+#ifdef MOZ_CAIRO_GFX
 already_AddRefed<gfxASurface>
 PresShell::PaintRangePaintInfo(nsTArray<nsAutoPtr<RangePaintInfo> >* aItems,
                                nsISelection* aSelection,
@@ -5230,6 +5237,7 @@ PresShell::RenderSelection(nsISelection* aSelection,
   return PaintRangePaintInfo(&rangeItems, aSelection, nsnull, area, aPoint,
                              aScreenRect);
 }
+#endif
 
 NS_IMETHODIMP
 PresShell::Paint(nsIView*             aView,
@@ -7354,9 +7362,8 @@ void ReflowCountMgr::PaintCount(const char *    aName,
     IndiReflowCounter * counter = (IndiReflowCounter *)PL_HashTableLookup(mIndiFrameCounts, key);
     if (counter != nsnull && counter->mName.EqualsASCII(aName)) {
       aRenderingContext->PushState();
-      nsFont font("Times", NS_FONT_STYLE_NORMAL, NS_FONT_VARIANT_NORMAL,
-                  NS_FONT_WEIGHT_NORMAL, 0,
-                  nsPresContext::CSSPixelsToAppUnits(11));
+      nsFont font("Times", NS_FONT_STYLE_NORMAL,NS_FONT_VARIANT_NORMAL,
+                  NS_FONT_WEIGHT_NORMAL,0,NSIntPointsToTwips(8));
 
       nsCOMPtr<nsIFontMetrics> fm = aPresContext->GetMetricsFor(font);
       aRenderingContext->SetFont(fm);

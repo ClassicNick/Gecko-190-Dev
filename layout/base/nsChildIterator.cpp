@@ -44,6 +44,7 @@
 #include "nsChildIterator.h"
 #include "nsIDocument.h"
 #include "nsBindingManager.h"
+#include "nsIFrame.h"
 
 nsresult
 ChildIterator::Init(nsIContent*    aContent,

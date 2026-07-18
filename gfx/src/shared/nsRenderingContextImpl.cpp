@@ -45,6 +45,8 @@
 #include <stdlib.h>
 
 
+nsIDrawingSurface* nsRenderingContextImpl::gBackbuffer = nsnull;
+nsRect nsRenderingContextImpl::gBackbufferBounds = nsRect(0, 0, 0, 0);
 nsSize nsRenderingContextImpl::gLargestRequestedSize = nsSize(0, 0);
 
 
@@ -68,6 +70,85 @@ nsRenderingContextImpl :: ~nsRenderingContextImpl()
 {
 
 
+}
+
+
+NS_IMETHODIMP nsRenderingContextImpl::GetBackbuffer(const nsRect &aRequestedSize, const nsRect &aMaxSize, PRBool aForBlending, nsIDrawingSurface* &aBackbuffer)
+{
+  // Default implementation assumes the backbuffer will be cached.
+  // If the platform implementation does not require the backbuffer to
+  // be cached override this method and make the following call instead:
+  // AllocateBackbuffer(aRequestedSize, aMaxSize, aBackbuffer, PR_FALSE);
+  return AllocateBackbuffer(aRequestedSize, aMaxSize, aBackbuffer, PR_TRUE, 0);
+}
+
+nsresult nsRenderingContextImpl::AllocateBackbuffer(const nsRect &aRequestedSize, const nsRect &aMaxSize, nsIDrawingSurface* &aBackbuffer, PRBool aCacheBackbuffer, PRUint32 aSurfFlags)
+{
+  nsRect newBounds;
+  nsresult rv = NS_OK;
+
+   if (! aCacheBackbuffer) {
+    newBounds = aRequestedSize;
+  } else {
+    GetDrawingSurfaceSize(aMaxSize, aRequestedSize, newBounds);
+  }
+
+  if ((nsnull == gBackbuffer)
+      || (gBackbufferBounds.width != newBounds.width)
+      || (gBackbufferBounds.height != newBounds.height))
+    {
+      if (gBackbuffer) {
+        //destroy existing DS
+        DestroyDrawingSurface(gBackbuffer);
+        gBackbuffer = nsnull;
+      }
+
+      rv = CreateDrawingSurface(newBounds, aSurfFlags, gBackbuffer);
+      //   printf("Allocating a new drawing surface %d %d\n", newBounds.width, newBounds.height);
+      if (NS_SUCCEEDED(rv)) {
+        gBackbufferBounds = newBounds;
+        SelectOffScreenDrawingSurface(gBackbuffer);
+      } else {
+        gBackbufferBounds.SetRect(0,0,0,0);
+        gBackbuffer = nsnull;
+      }
+    } else {
+      SelectOffScreenDrawingSurface(gBackbuffer);
+
+      float p2t;
+      nsCOMPtr<nsIDeviceContext>  dx;
+      GetDeviceContext(*getter_AddRefs(dx));
+      p2t = dx->DevUnitsToAppUnits();
+      nsRect bounds = aRequestedSize;
+      bounds *= p2t;
+
+      SetClipRect(bounds, nsClipCombine_kReplace);
+    }
+
+  aBackbuffer = gBackbuffer;
+  return rv;
+}
+
+NS_IMETHODIMP nsRenderingContextImpl::ReleaseBackbuffer(void)
+{
+  // If the platform does not require the backbuffer to be cached
+  // override this method and call DestroyCachedBackbuffer
+  return NS_OK;
+}
+
+NS_IMETHODIMP nsRenderingContextImpl::DestroyCachedBackbuffer(void)
+{
+  if (gBackbuffer) {
+    DestroyDrawingSurface(gBackbuffer);
+    gBackbuffer = nsnull;
+  }
+  return NS_OK;
+}
+
+NS_IMETHODIMP nsRenderingContextImpl::UseBackbuffer(PRBool* aUseBackbuffer)
+{
+  *aUseBackbuffer = PR_TRUE;
+  return NS_OK;
 }
 
 NS_IMETHODIMP nsRenderingContextImpl::PushTranslation(PushedTranslation* aState)
@@ -148,16 +229,17 @@ void nsRenderingContextImpl::GetDrawingSurfaceSize(const nsRect& aMaxBackbufferS
 void nsRenderingContextImpl::CalculateDiscreteSurfaceSize(const nsRect& aMaxBackbufferSize, const nsRect& aRequestedSize, nsRect& aSurfaceSize) 
 {
   // Get the height and width of the screen
-  nscoord height;
-  nscoord width;
+  PRInt32 height;
+  PRInt32 width;
 
   nsCOMPtr<nsIDeviceContext>  dx;
   GetDeviceContext(*getter_AddRefs(dx));
   dx->GetDeviceSurfaceDimensions(width, height);
 
-  PRInt32 p2a = dx->AppUnitsPerDevPixel();
-  PRInt32 screenHeight = NSAppUnitsToIntPixels(height, p2a);
-  PRInt32 screenWidth = NSAppUnitsToIntPixels(width, p2a);
+  float devUnits;
+  devUnits = dx->DevUnitsToAppUnits();
+  PRInt32 screenHeight = NSToIntRound(float( height) / devUnits );
+  PRInt32 screenWidth = NSToIntRound(float( width) / devUnits );
 
   // These tests must go from smallest rectangle to largest rectangle.
 
@@ -227,7 +309,6 @@ nsRenderingContextImpl::GetRightToLeftText(PRBool* aIsRTL)
 #include "nsIInterfaceRequestor.h"
 #include "nsIInterfaceRequestorUtils.h"
 
-#ifndef MOZ_CAIRO_GFX
 NS_IMETHODIMP nsRenderingContextImpl::DrawImage(imgIContainer *aImage, const nsRect & aSrcRect, const nsRect & aDestRect)
 {
   nsRect dr = aDestRect;
@@ -317,7 +398,6 @@ NS_IMETHODIMP nsRenderingContextImpl::DrawImage(imgIContainer *aImage, const nsR
   return img->Draw(*this, surface, sr.x, sr.y, sr.width, sr.height,
                    dr.x, dr.y, dr.width, dr.height);
 }
-#endif
 
 /* [noscript] void drawTile (in imgIContainer aImage, in nscoord aXImageStart, in nscoord aYImageStart, [const] in nsRect aTargetRect); */
 NS_IMETHODIMP

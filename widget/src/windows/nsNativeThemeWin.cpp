@@ -59,10 +59,16 @@
 #include "nsWidgetAtoms.h"
 #include <malloc.h>
 
+#ifdef MOZ_CAIRO_GFX
 #include "gfxContext.h"
 #include "gfxMatrix.h"
 #include "gfxWindowsSurface.h"
 #include "gfxWindowsNativeDrawing.h"
+#endif
+
+#if defined (_MSC_VER) && _MSC_VER <= 1100
+typedef LONG HRESULT;
+#endif
 
 /* 
  * The following constants are used to determine how a widget is drawn using
@@ -247,11 +253,16 @@ static void GetNativeRect(const nsRect& aSrc, RECT& aDst)
 void
 nsNativeThemeWin::UpdateConfig()
 {
-  // On Windows 2000 this SystemParametersInfo call will fail
-  //   and we get non-flat as desired.
-  BOOL useFlat = PR_FALSE;
-  mFlatMenus = ::SystemParametersInfo(SPI_GETFLATMENU, 0, &useFlat, 0) ?
-                   useFlat : PR_FALSE;
+  // Check for Windows XP (or later), and check if 'flat menus' are enabled.
+  BOOL isFlatMenus;
+  HRESULT rv;
+  mFlatMenus = PR_FALSE;
+
+  // This will simply fail on Windows versions prior to XP, so we get
+  // non-flat as desired.
+  rv = ::SystemParametersInfo(SPI_GETFLATMENU, 0, &isFlatMenus, 0);
+  if (rv)
+    mFlatMenus = isFlatMenus;
 }
 
 HANDLE
@@ -818,20 +829,21 @@ nsNativeThemeWin::DrawWidgetBackground(nsIRenderingContext* aContext,
 
   nsCOMPtr<nsIDeviceContext> dc;
   aContext->GetDeviceContext(*getter_AddRefs(dc));
-  PRInt32 p2a = dc->AppUnitsPerDevPixel();
+  float T2P = dc->TwipsToDevUnits();
   RECT widgetRect;
   RECT clipRect;
+
+#ifdef MOZ_CAIRO_GFX
   gfxRect tr, cr;
+  tr.x = NSToCoordRound(tr.x * T2P);
+  tr.y = NSToCoordRound(tr.y * T2P);
+  tr.size.width  = NSToCoordRound(tr.width * T2P);
+  tr.size.height = NSToCoordRound(tr.height * T2P);
 
-  tr.pos.x = NSAppUnitsToIntPixels(aRect.x, p2a);
-  tr.pos.y = NSAppUnitsToIntPixels(aRect.y, p2a);
-  tr.size.width  = NSAppUnitsToIntPixels(aRect.width, p2a);
-  tr.size.height = NSAppUnitsToIntPixels(aRect.height, p2a);
-
-  cr.pos.x = NSAppUnitsToIntPixels(aClipRect.x, p2a);
-  cr.pos.y = NSAppUnitsToIntPixels(aClipRect.y, p2a);
-  cr.size.width  = NSAppUnitsToIntPixels(aClipRect.width, p2a);
-  cr.size.height = NSAppUnitsToIntPixels(aClipRect.height, p2a);
+  cr.pos.x = NSToCoordRound(cr.x * T2P);
+  cr.pos.y = NSToCoordRound(cr.y * T2P);
+  cr.size.width  = NSToCoordRound(cr.width * T2P);
+  cr.size.height = NSToCoordRound(cr.height * T2P);
 
   nsRefPtr<gfxContext> ctx = (gfxContext*)aContext->GetNativeGraphicData(nsIRenderingContext::NATIVE_THEBES_CONTEXT);
 
@@ -852,6 +864,34 @@ RENDER_AGAIN:
              offset.x, offset.y);
   }
 #endif
+#else /* non-MOZ_CAIRO_GFX */
+
+  nsRect tr(aRect);
+  nsRect cr(aClipRect);
+  nsTransform2D* transformMatrix;
+  aContext->GetCurrentTransform(transformMatrix);
+
+  transformMatrix->TransformCoord(&tr.x,&tr.y,&tr.width,&tr.height);
+  transformMatrix->TransformCoord(&cr.x,&cr.y,&cr.width,&cr.height);
+
+  HDC hdc = (HDC)aContext->GetNativeGraphicData(nsIRenderingContext::NATIVE_WINDOWS_DC);
+  if (!hdc)
+    return NS_ERROR_FAILURE;
+
+#ifndef WINCE
+  SetGraphicsMode(hdc, GM_ADVANCED);
+#endif
+
+GetNativeRect(tr, widgetRect);
+GetNativeRect(cr, clipRect);
+
+#if 0
+  fprintf (stderr, "widget: [%d %d %d %d]\nclip: [%d %d %d %d]\n",
+           widgetRect.left, widgetRect.top, widgetRect.right, widgetRect.bottom,
+           clipRect.left, clipRect.top, clipRect.right, clipRect.bottom);
+  fflush (stderr);
+#endif
+#endif /* MOZ_CAIRO_GFX */
 
   // For left edge and right edge tabs, we need to adjust the widget
   // rects and clip rects so that the edges don't get drawn.
@@ -942,12 +982,14 @@ RENDER_AGAIN:
     }
   }
 
+#ifdef MOZ_CAIRO_GFX
   nativeDrawing.EndNativeDrawing();
 
   if (nativeDrawing.ShouldRenderAgain())
     goto RENDER_AGAIN;
 
   nativeDrawing.PaintToContext();
+#endif
 
   return NS_OK;
 }
@@ -1947,19 +1989,23 @@ nsresult nsNativeThemeWin::ClassicDrawWidgetBackground(nsIRenderingContext* aCon
 
   nsCOMPtr<nsIDeviceContext> dc;
   aContext->GetDeviceContext(*getter_AddRefs(dc));
-  PRInt32 p2a = dc->AppUnitsPerDevPixel();
+  float T2P = dc->TwipsToDevUnits();
   RECT widgetRect;
-  gfxRect tr, cr;
+#ifndef MOZ_CAIRO_GFX
+  nsRect tr(aRect);
+#endif
 
-  tr.pos.x = NSAppUnitsToIntPixels(aRect.x, p2a);
-  tr.pos.y = NSAppUnitsToIntPixels(aRect.y, p2a);
-  tr.size.width  = NSAppUnitsToIntPixels(aRect.width, p2a);
-  tr.size.height = NSAppUnitsToIntPixels(aRect.height, p2a);
+#ifdef MOZ_CAIRO_GFX
+gfxRect tr, cr;
+  tr.x = NSToCoordRound(tr.x * T2P);
+  tr.y = NSToCoordRound(tr.y * T2P);
+  tr.width  = NSToCoordRound(tr.width * T2P);
+  tr.height = NSToCoordRound(tr.height * T2P);
 
-  cr.pos.x = NSAppUnitsToIntPixels(aClipRect.x, p2a);
-  cr.pos.y = NSAppUnitsToIntPixels(aClipRect.y, p2a);
-  cr.size.width  = NSAppUnitsToIntPixels(aClipRect.width, p2a);
-  cr.size.height = NSAppUnitsToIntPixels(aClipRect.height, p2a);
+  cr.pos.x = NSToCoordRound(aClipRect.x * T2P);
+  cr.pos.y = NSToCoordRound(aClipRect.y * T2P);
+  cr.size.width  = NSToCoordRound(aClipRect.width * T2P);
+  cr.size.height = NSToCoordRound(aClipRect.height * T2P);
 
   nsRefPtr<gfxContext> ctx = (gfxContext*)aContext->GetNativeGraphicData(nsIRenderingContext::NATIVE_THEBES_CONTEXT);
 
@@ -1970,6 +2016,16 @@ RENDER_AGAIN:
   HDC hdc = nativeDrawing.BeginNativeDrawing();
 
   nativeDrawing.TransformToNativeRect(tr, widgetRect);
+
+#else /* non-MOZ_CAIRO_GFX */
+
+  nsTransform2D* transformMatrix;
+  aContext->GetCurrentTransform(transformMatrix);
+  transformMatrix->TransformCoord(&tr.x,&tr.y,&tr.width,&tr.height);
+
+  HDC hdc = (HDC)aContext->GetNativeGraphicData(nsIRenderingContext::NATIVE_WINDOWS_DC);
+GetNativeRect(tr, widgetRect);
+#endif /* MOZ_CAIRO_GFX */
 
   rv = NS_OK;
   switch (aWidgetType) { 
@@ -2110,7 +2166,7 @@ RENDER_AGAIN:
       else
       {
         DrawCheckedRect(hdc, widgetRect, COLOR_3DHILIGHT, COLOR_3DFACE,
-                        (HBRUSH) COLOR_SCROLLBAR+1);
+                        (HBRUSH) COLOR_SCROLLBAR);
       }
       // XXX should invert the part of the track being clicked here
       // but the track is never :active
@@ -2239,6 +2295,7 @@ RENDER_AGAIN:
       break;
   }
 
+#ifdef MOZ_CAIRO_GFX
   nativeDrawing.EndNativeDrawing();
 
   if (NS_FAILED(rv))
@@ -2248,10 +2305,12 @@ RENDER_AGAIN:
     goto RENDER_AGAIN;
 
   nativeDrawing.PaintToContext();
+#endif
 
   return rv;
 }
 
+#ifdef MOZ_CAIRO_GFX
 PRUint32
 nsNativeThemeWin::GetWidgetNativeDrawingFlags(PRUint8 aWidgetType)
 {
@@ -2322,6 +2381,7 @@ nsNativeThemeWin::GetWidgetNativeDrawingFlags(PRUint8 aWidgetType)
     gfxWindowsNativeDrawing::CANNOT_AXIS_ALIGNED_SCALE |
     gfxWindowsNativeDrawing::CANNOT_COMPLEX_TRANSFORM;
 }
+#endif
 
 ///////////////////////////////////////////
 // Creation Routine

@@ -43,6 +43,7 @@
  * stylesheets (<style>, <link>, processing instructions, etc).
  */
 
+#include "nsCOMPtr.h"
 #include "nsStyleLinkElement.h"
 
 #include "nsIContent.h"

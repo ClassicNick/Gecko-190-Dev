@@ -20,7 +20,6 @@
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
- *   L. David Baron <dbaron@dbaron.org>, Mozilla Corporation
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either of the GNU General Public License Version 2 or later (the "GPL"),
@@ -309,30 +308,25 @@ nsImageFrame::Init(nsIContent*      aContent,
 }
 
 PRBool
-nsImageFrame::UpdateIntrinsicSize(imgIContainer* aImage)
+nsImageFrame::RecalculateTransform(imgIContainer* aImage)
 {
-  NS_PRECONDITION(aImage, "null image");
-
   PRBool intrinsicSizeChanged = PR_FALSE;
   
   if (aImage) {
+    float p2t;
+    p2t = PresContext()->PixelsToTwips();
+
     nsSize imageSizeInPx;
     aImage->GetWidth(&imageSizeInPx.width);
     aImage->GetHeight(&imageSizeInPx.height);
-    nsSize newSize(nsPresContext::CSSPixelsToAppUnits(imageSizeInPx.width),
-                   nsPresContext::CSSPixelsToAppUnits(imageSizeInPx.height));
+    nsSize newSize(NSIntPixelsToTwips(imageSizeInPx.width, p2t),
+                   NSIntPixelsToTwips(imageSizeInPx.height, p2t));
     if (mIntrinsicSize != newSize) {
       intrinsicSizeChanged = PR_TRUE;
       mIntrinsicSize = newSize;
     }
   }
 
-  return intrinsicSizeChanged;
-}
-
-void
-nsImageFrame::RecalculateTransform()
-{
   // In any case, we need to translate this over appropriately.  Set
   // translation _before_ setting scaling so that it does not get
   // scaled!
@@ -340,9 +334,8 @@ nsImageFrame::RecalculateTransform()
   // XXXbz does this introduce rounding errors because of the cast to
   // float?  Should we just manually add that stuff in every time
   // instead?
-  nsRect innerArea = GetInnerArea();
-  mTransform.SetToTranslate(float(innerArea.x),
-                            float(innerArea.y - GetContinuationOffset()));
+  mTransform.SetToTranslate(float(mBorderPadding.left),
+                            float(mBorderPadding.top - GetContinuationOffset()));
   
   // Set the scale factors
   if (mIntrinsicSize.width != 0 && mIntrinsicSize.height != 0 &&
@@ -350,6 +343,8 @@ nsImageFrame::RecalculateTransform()
     mTransform.AddScale(float(mComputedSize.width)  / float(mIntrinsicSize.width),
                         float(mComputedSize.height) / float(mIntrinsicSize.height));
   }
+
+  return intrinsicSizeChanged;
 }
 
 /*
@@ -402,21 +397,23 @@ nsImageFrame::IsPendingLoad(imgIContainer* aContainer) const
 nsRect
 nsImageFrame::SourceRectToDest(const nsRect& aRect)
 {
+  float p2t = PresContext()->PixelsToTwips();
+
   // When scaling the image, row N of the source image may (depending on
   // the scaling function) be used to draw any row in the destination image
   // between floor(F * (N-1)) and ceil(F * (N+1)), where F is the
   // floating-point scaling factor.  The same holds true for columns.
   // So, we start by computing that bound without the floor and ceiling.
 
-  nsRect r(nsPresContext::CSSPixelsToAppUnits(aRect.x - 1),
-           nsPresContext::CSSPixelsToAppUnits(aRect.y - 1),
-           nsPresContext::CSSPixelsToAppUnits(aRect.width + 2),
-           nsPresContext::CSSPixelsToAppUnits(aRect.height + 2));
+  nsRect r(NSIntPixelsToTwips(aRect.x - 1, p2t),
+           NSIntPixelsToTwips(aRect.y - 1, p2t),
+           NSIntPixelsToTwips(aRect.width + 2, p2t),
+           NSIntPixelsToTwips(aRect.height + 2, p2t));
 
   mTransform.TransformCoord(&r.x, &r.y, &r.width, &r.height);
 
   // Now, round the edges out to the pixel boundary.
-  int scale = nsPresContext::CSSPixelsToAppUnits(1);
+  int scale = (int) p2t;
   nscoord right = r.x + r.width;
   nscoord bottom = r.y + r.height;
 
@@ -526,7 +523,7 @@ nsImageFrame::OnStartContainer(imgIRequest *aRequest, imgIContainer *aImage)
     return NS_OK;
   }
   
-  UpdateIntrinsicSize(aImage);
+  RecalculateTransform(aImage);
 
   // Now we need to reflow if we have an unconstrained size and have
   // already gotten the initial reflow
@@ -585,8 +582,6 @@ nsImageFrame::OnDataAvailable(imgIRequest *aRequest,
     }
   }
 
-  // XXX We really need to round this out, now that we're doing better
-  // image scaling!
   nsRect r = SourceRectToDest(*aRect);
 #ifdef DEBUG_decode
   printf("Source rect (%d,%d,%d,%d) -> invalidate dest rect (%d,%d,%d,%d)\n",
@@ -630,7 +625,7 @@ nsImageFrame::OnStopDecode(imgIRequest *aRequest,
       nsCOMPtr<imgIContainer> imageContainer;
       aRequest->GetImage(getter_AddRefs(imageContainer));
       NS_ASSERTION(imageContainer, "Successful load with no container?");
-      intrinsicSizeChanged = UpdateIntrinsicSize(imageContainer);
+      intrinsicSizeChanged = RecalculateTransform(imageContainer);
     }
     else {
       // Have to size to 0,0 so that GetDesiredSize recalculates the size
@@ -694,9 +689,12 @@ nsImageFrame::EnsureIntrinsicSize(nsPresContext* aPresContext)
     if (currentRequest) {
       currentRequest->GetImage(getter_AddRefs(currentContainer));
     }
+      
+    float p2t;
+    p2t = aPresContext->PixelsToTwips();
 
     if (currentContainer) {
-      UpdateIntrinsicSize(currentContainer);
+      RecalculateTransform(currentContainer);
     } else {
       // image request is null or image size not known, probably an
       // invalid image specified
@@ -705,9 +703,10 @@ nsImageFrame::EnsureIntrinsicSize(nsPresContext* aPresContext)
       // XXX: we need this in composer, but it is also good for
       // XXX: general quirks mode to always have room for the icon
       if (aPresContext->CompatibilityMode() == eCompatibility_NavQuirks) {
-        mIntrinsicSize.SizeTo(nsPresContext::CSSPixelsToAppUnits(ICON_SIZE+(2*(ICON_PADDING+ALT_BORDER_WIDTH))),
-                              nsPresContext::CSSPixelsToAppUnits(ICON_SIZE+(2*(ICON_PADDING+ALT_BORDER_WIDTH))));
+        mIntrinsicSize.SizeTo(NSIntPixelsToTwips(ICON_SIZE+(2*(ICON_PADDING+ALT_BORDER_WIDTH)), p2t),
+                              NSIntPixelsToTwips(ICON_SIZE+(2*(ICON_PADDING+ALT_BORDER_WIDTH)), p2t));
       }
+      RecalculateTransform(nsnull);
     }
   }
 }
@@ -721,27 +720,53 @@ nsImageFrame::ComputeSize(nsIRenderingContext *aRenderingContext,
   nsPresContext *presContext = PresContext();
   EnsureIntrinsicSize(presContext);
 
+  // convert from normal twips to scaled twips (printing...)
+  float t2st = presContext->TwipsToPixels() *
+    presContext->ScaledPixelsToTwips(); // twips to scaled twips
+  nscoord intrinsicWidth =
+      NSToCoordRound(float(mIntrinsicSize.width) * t2st);
+  nscoord intrinsicHeight =
+      NSToCoordRound(float(mIntrinsicSize.height) * t2st);
+
   return nsLayoutUtils::ComputeSizeWithIntrinsicDimensions(
                             aRenderingContext, this,
-                            mIntrinsicSize,
+                            nsSize(intrinsicWidth, intrinsicHeight),
                             aCBSize, aBorder, aPadding);
 }
 
 nsRect 
 nsImageFrame::GetInnerArea() const
 {
-  return GetContentRect() - GetPosition();
+  nsRect r;
+  r.x = mBorderPadding.left;
+  r.y = GetPrevInFlow() ? 0 : mBorderPadding.top;
+  r.width = mRect.width - mBorderPadding.left - mBorderPadding.right;
+  r.height = mRect.height -
+    (GetPrevInFlow() ? 0 : mBorderPadding.top) -
+    (GetNextInFlow() ? 0 : mBorderPadding.bottom);
+  return r;
 }
 
 // get the offset into the content area of the image where aImg starts if it is a continuation.
 nscoord 
-nsImageFrame::GetContinuationOffset() const
+nsImageFrame::GetContinuationOffset(nscoord* aWidth) const
 {
   nscoord offset = 0;
-  for (nsIFrame *f = GetPrevInFlow(); f; f = f->GetPrevInFlow()) {
-    offset += f->GetContentRect().height;
+  if (aWidth) {
+    *aWidth = 0;
   }
-  NS_ASSERTION(offset >= 0, "bogus GetContentRect");
+
+  if (GetPrevInFlow()) {
+    for (nsIFrame* prevInFlow = GetPrevInFlow() ; prevInFlow; prevInFlow = prevInFlow->GetPrevInFlow()) {
+      nsRect rect = prevInFlow->GetRect();
+      if (aWidth) {
+        *aWidth = rect.width;
+      }
+      offset += rect.height;
+    }
+    offset -= mBorderPadding.top;
+    offset = PR_MAX(0, offset);
+  }
   return offset;
 }
 
@@ -754,7 +779,10 @@ nsImageFrame::GetMinWidth(nsIRenderingContext *aRenderingContext)
   DISPLAY_MIN_WIDTH(this, result);
   nsPresContext *presContext = PresContext();
   EnsureIntrinsicSize(presContext);
-  result = mIntrinsicSize.width;
+  // convert from normal twips to scaled twips (printing...)
+  float t2st = presContext->TwipsToPixels() *
+               presContext->ScaledPixelsToTwips();
+  result = NSToCoordRound(float(mIntrinsicSize.width) * t2st);
   return result;
 }
 
@@ -768,7 +796,9 @@ nsImageFrame::GetPrefWidth(nsIRenderingContext *aRenderingContext)
   nsPresContext *presContext = PresContext();
   EnsureIntrinsicSize(presContext);
   // convert from normal twips to scaled twips (printing...)
-  result = mIntrinsicSize.width;
+  float t2st = presContext->TwipsToPixels() *
+               presContext->ScaledPixelsToTwips();
+  result = NSToCoordRound(float(mIntrinsicSize.width) * t2st);
   return result;
 }
 
@@ -801,21 +831,26 @@ nsImageFrame::Reflow(nsPresContext*          aPresContext,
     mState |= IMAGE_GOTINITIALREFLOW;
   }
 
-  mComputedSize = 
-    nsSize(aReflowState.ComputedWidth(), aReflowState.mComputedHeight);
-  RecalculateTransform();
+  // Set our borderpadding so that if GetDesiredSize has to recalc the
+  // transform it can.
+  mBorderPadding   = aReflowState.mComputedBorderPadding;
+
+  nsSize newSize(aReflowState.ComputedWidth(), aReflowState.mComputedHeight);
+  if (mComputedSize != newSize) {
+    mComputedSize = newSize;
+    RecalculateTransform(nsnull);
+  }
 
   aMetrics.width = mComputedSize.width;
   aMetrics.height = mComputedSize.height;
 
   // add borders and padding
-  aMetrics.width  += aReflowState.mComputedBorderPadding.LeftRight();
-  aMetrics.height += aReflowState.mComputedBorderPadding.TopBottom();
+  aMetrics.width  += mBorderPadding.left + mBorderPadding.right;
+  aMetrics.height += mBorderPadding.top + mBorderPadding.bottom;
   
   if (GetPrevInFlow()) {
-    aMetrics.width = GetPrevInFlow()->GetSize().width;
-    nscoord y = GetContinuationOffset();
-    aMetrics.height -= y + aReflowState.mComputedBorderPadding.top;
+    nscoord y = GetContinuationOffset(&aMetrics.width);
+    aMetrics.height -= y + mBorderPadding.top;
     aMetrics.height = PR_MAX(0, aMetrics.height);
   }
 
@@ -840,7 +875,7 @@ nsImageFrame::Reflow(nsPresContext*          aPresContext,
     // split an image frame but not an image control frame
     if (nsGkAtoms::imageFrame == GetType()) {
       // our desired height was greater than 0, so to avoid infinite splitting, use 1 pixel as the min
-      aMetrics.height = PR_MAX(nsPresContext::CSSPixelsToAppUnits(1), aReflowState.availableHeight);
+      aMetrics.height = PR_MAX(NSToCoordRound(aPresContext->ScaledPixelsToTwips()), aReflowState.availableHeight);
       aStatus = NS_FRAME_NOT_COMPLETE;
     }
   }
@@ -1014,7 +1049,6 @@ struct nsRecessedBorder : public nsStyleBorder {
 
 void
 nsImageFrame::DisplayAltFeedback(nsIRenderingContext& aRenderingContext,
-                                 const nsRect&        aDirtyRect,
                                  imgIRequest*         aRequest,
                                  nsPoint              aPt)
 {
@@ -1022,12 +1056,14 @@ nsImageFrame::DisplayAltFeedback(nsIRenderingContext& aRenderingContext,
   nsRect  inner = GetInnerArea() + aPt;
 
   // Display a recessed one pixel border
-  nscoord borderEdgeWidth = nsPresContext::CSSPixelsToAppUnits(ALT_BORDER_WIDTH);
+  nscoord borderEdgeWidth;
+  float   p2t = PresContext()->ScaledPixelsToTwips();
+  borderEdgeWidth = NSIntPixelsToTwips(ALT_BORDER_WIDTH, p2t);
 
   // if inner area is empty, then make it big enough for at least the icon
   if (inner.IsEmpty()){
-    inner.SizeTo(2*(nsPresContext::CSSPixelsToAppUnits(ICON_SIZE+ICON_PADDING+ALT_BORDER_WIDTH)),
-                 2*(nsPresContext::CSSPixelsToAppUnits(ICON_SIZE+ICON_PADDING+ALT_BORDER_WIDTH)));
+    inner.SizeTo(2*(NSIntPixelsToTwips(ICON_SIZE+ICON_PADDING+ALT_BORDER_WIDTH,p2t)),
+                 2*(NSIntPixelsToTwips(ICON_SIZE+ICON_PADDING+ALT_BORDER_WIDTH,p2t)));
   }
 
   // Make sure we have enough room to actually render the border within
@@ -1043,8 +1079,8 @@ nsImageFrame::DisplayAltFeedback(nsIRenderingContext& aRenderingContext,
 
   // Adjust the inner rect to account for the one pixel recessed border,
   // and a six pixel padding on each edge
-  inner.Deflate(nsPresContext::CSSPixelsToAppUnits(ICON_PADDING+ALT_BORDER_WIDTH), 
-                nsPresContext::CSSPixelsToAppUnits(ICON_PADDING+ALT_BORDER_WIDTH));
+  inner.Deflate(NSIntPixelsToTwips(ICON_PADDING+ALT_BORDER_WIDTH, p2t), 
+                NSIntPixelsToTwips(ICON_PADDING+ALT_BORDER_WIDTH, p2t));
   if (inner.IsEmpty()) {
     return;
   }
@@ -1058,7 +1094,7 @@ nsImageFrame::DisplayAltFeedback(nsIRenderingContext& aRenderingContext,
   // Check if we should display image placeholders
   if (dispIcon) {
     const nsStyleVisibility* vis = GetStyleVisibility();
-    nscoord size = nsPresContext::CSSPixelsToAppUnits(ICON_SIZE);
+    PRInt32 size = NSIntPixelsToTwips(ICON_SIZE, p2t);
 
     PRBool iconUsed = PR_FALSE;
 
@@ -1071,10 +1107,11 @@ nsImageFrame::DisplayAltFeedback(nsIRenderingContext& aRenderingContext,
       }
       if (imgCon) {
         // draw it
+        nsRect source(0,0,size,size);
         nsRect dest((vis->mDirection == NS_STYLE_DIRECTION_RTL) ?
                     inner.XMost() - size : inner.x,
                     inner.y, size, size);
-        nsLayoutUtils::DrawImage(&aRenderingContext, imgCon, dest, aDirtyRect);
+        aRenderingContext.DrawImage(imgCon, source, dest);
         iconUsed = PR_TRUE;
       }
     }
@@ -1084,18 +1121,17 @@ nsImageFrame::DisplayAltFeedback(nsIRenderingContext& aRenderingContext,
       nscolor oldColor;
       nscoord iconXPos = (vis->mDirection ==   NS_STYLE_DIRECTION_RTL) ?
                          inner.XMost() - size : inner.x;
-      nscoord twoPX = nsPresContext::CSSPixelsToAppUnits(2);
       aRenderingContext.DrawRect(iconXPos, inner.y,size,size);
       aRenderingContext.GetColor(oldColor);
       aRenderingContext.SetColor(NS_RGB(0xFF,0,0));
-      aRenderingContext.FillEllipse(size/2 + iconXPos, size/2 + inner.y,
-                                    size/2 - twoPX, size/2 - twoPX);
+      aRenderingContext.FillEllipse(NS_STATIC_CAST(int,size/2) + iconXPos,NS_STATIC_CAST(int,size/2) + inner.y,
+                                    NS_STATIC_CAST(int,(size/2)-(2*p2t)),NS_STATIC_CAST(int,(size/2)-(2*p2t)));
       aRenderingContext.SetColor(oldColor);
     }  
 
     // Reduce the inner rect by the width of the icon, and leave an
     // additional ICON_PADDING pixels for padding
-    PRInt32 iconWidth = nsPresContext::CSSPixelsToAppUnits(ICON_SIZE + ICON_PADDING);
+    PRInt32 iconWidth = NSIntPixelsToTwips(ICON_SIZE + ICON_PADDING, p2t);
     if (vis->mDirection != NS_STYLE_DIRECTION_RTL)
       inner.x += iconWidth;
     inner.width -= iconWidth;
@@ -1120,7 +1156,6 @@ static void PaintAltFeedback(nsIFrame* aFrame, nsIRenderingContext* aCtx,
 {
   nsImageFrame* f = NS_STATIC_CAST(nsImageFrame*, aFrame);
   f->DisplayAltFeedback(*aCtx,
-                        aDirtyRect,
                         IMAGE_OK(f->GetContent()->IntrinsicState(), PR_TRUE)
                            ? nsImageFrame::gIconLoad->mLoadingImage
                            : nsImageFrame::gIconLoad->mBrokenImage,
@@ -1177,19 +1212,64 @@ nsImageFrame::PaintImage(nsIRenderingContext& aRenderingContext, nsPoint aPt,
 {
   // Render the image into our content area (the area inside
   // the borders and padding)
-  NS_ASSERTION(GetInnerArea().width == mComputedSize.width, "bad width");
   nsRect inner = GetInnerArea() + aPt;
-  nsRect clip;
-  clip.IntersectRect(inner, aDirtyRect);
+  nsRect paintArea(inner);
 
-  nsRect dest(inner.TopLeft(), mComputedSize);
-  dest.y -= GetContinuationOffset();
+  nscoord offsetY = 0; 
 
-  nsLayoutUtils::DrawImage(&aRenderingContext, aImage, dest, clip);
+  // if the image is split account for y-offset
+  if (GetPrevInFlow()) {
+    offsetY = GetContinuationOffset();
+  }
+
+  if (mIntrinsicSize == mComputedSize) {
+    // Find the actual rect to be painted to in the rendering context
+    paintArea.IntersectRect(paintArea, aDirtyRect);
+
+    // Rect in the image to paint
+    nsRect r(paintArea.x - inner.x,
+             paintArea.y - inner.y + offsetY,
+             paintArea.width,
+             paintArea.height);
+  
+    aRenderingContext.DrawImage(aImage, r, paintArea);
+  } else {
+    // The computed size is the total size of all the continuations,
+    // including ourselves.  Note that we're basically inverting
+    // mTransform here (would it too much to ask for
+    // nsTransform2D::Invert?), since we need to convert from
+    // rendering context coords to image coords...
+    nsTransform2D trans;
+    trans.SetToScale((float(mIntrinsicSize.width) / float(mComputedSize.width)),
+                     (float(mIntrinsicSize.height) / float(mComputedSize.height)));
+  
+    // XXXbz it looks like we should take
+    // IntersectRect(paintArea, aDirtyRect) here too, but things
+    // get very weird if I do that ....
+    //   paintArea.IntersectRect(paintArea, aDirtyRect);
+  
+    // dirty rect in image our coord size...
+    nsRect r(paintArea.x - inner.x,
+             paintArea.y - inner.y + offsetY,
+             paintArea.width,
+             paintArea.height);
+
+    // Transform that to image coords
+    trans.TransformCoord(&r.x, &r.y, &r.width, &r.height);
+          
+#ifdef DEBUG_decode
+    printf("IF draw src (%d,%d,%d,%d) -> dst (%d,%d,%d,%d)\n",
+           r.x, r.y, r.width, r.height, paintArea.x, paintArea.y,
+           paintArea.width, paintArea.height);
+#endif
+
+    aRenderingContext.DrawImage(aImage, r, paintArea);
+  }
 
   nsPresContext* presContext = PresContext();
   nsImageMap* map = GetImageMap(presContext);
   if (nsnull != map) {
+    nsRect inner = GetInnerArea() + aPt;
     aRenderingContext.PushState();
     aRenderingContext.SetColor(NS_RGB(0, 0, 0));
     aRenderingContext.SetLineStyle(nsLineStyle_kDotted);
@@ -1408,8 +1488,11 @@ nsImageFrame::TranslateEventCoords(const nsPoint& aPoint,
   x -= inner.x;
   y -= inner.y;
 
-  aResult.x = nsPresContext::AppUnitsToIntCSSPixels(x);
-  aResult.y = nsPresContext::AppUnitsToIntCSSPixels(y);
+  // Translate the coordinates from twips to pixels
+  float t2p;
+  t2p = PresContext()->TwipsToPixels();
+  aResult.x = NSTwipsToIntPixels(x, t2p);
+  aResult.y = NSTwipsToIntPixels(y, t2p);
 }
 
 PRBool
@@ -1634,19 +1717,6 @@ mRect.height);
   return NS_OK;
 }
 #endif
-
-PRIntn
-nsImageFrame::GetSkipSides() const
-{
-  PRIntn skip = 0;
-  if (nsnull != GetPrevInFlow()) {
-    skip |= 1 << NS_SIDE_TOP;
-  }
-  if (nsnull != GetNextInFlow()) {
-    skip |= 1 << NS_SIDE_BOTTOM;
-  }
-  return skip;
-}
 
 NS_IMETHODIMP 
 nsImageFrame::GetIntrinsicImageSize(nsSize& aSize)

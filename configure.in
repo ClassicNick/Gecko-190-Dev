@@ -569,8 +569,8 @@ case "$target" in
 
     AC_DEFINE_UNQUOTED(WINVER,0x$WINVER)
     AC_DEFINE_UNQUOTED(_WIN32_WINNT,0x$WINVER)
-    # Require OS features provided by IE 5.0
-    AC_DEFINE_UNQUOTED(_WIN32_IE,0x0500)
+    # Require OS features provided by IE 4.0
+    AC_DEFINE_UNQUOTED(_WIN32_IE,0x0400)
     ;;
 esac
 
@@ -3996,11 +3996,8 @@ fi
 if test -z "$PNG_DIR" -o "$PNG_DIR" = no; then
     SYSTEM_PNG=
 else
-    _SAVE_PNG_LIBS=$PNG_LIBS
     AC_CHECK_LIB(png, png_get_valid, [SYSTEM_PNG=1 PNG_LIBS="-lpng $PNG_LIBS"],
                  SYSTEM_PNG=, $PNG_LIBS)
-    AC_CHECK_LIB(png, png_get_acTL, ,
-                 [SYSTEM_PNG= PNG_LIBS=$_SAVE_PNG_LIBS], $_SAVE_PNG_LIBS)
 fi
 if test "$SYSTEM_PNG" = 1; then
     LIBS="$PNG_LIBS $LIBS"
@@ -4341,7 +4338,6 @@ browser)
   MOZ_PLACES=1
   MOZ_PLACES_BOOKMARKS=
   # always enabled for form history
-  MOZ_MORKREADER=1
   MOZ_SAFE_BROWSING=1
   MOZ_APP_VERSION=$FIREFOX_VERSION
   MOZ_NO_XPCOM_OBSOLETE=1
@@ -5852,11 +5848,7 @@ MOZ_ARG_DISABLE_BOOL(svg,
     MOZ_SVG=,
     MOZ_SVG=1 )
 if test -n "$MOZ_SVG"; then
-  if test -z "$MOZ_ENABLE_CAIRO_GFX"; then
-    AC_MSG_ERROR([SVG requires cairo gfx])
-  else
-    AC_DEFINE(MOZ_SVG)
-  fi
+  AC_DEFINE(MOZ_SVG)
 fi
 
 MOZ_SVG_FOREIGNOBJECT=$MOZ_ENABLE_CAIRO_GFX

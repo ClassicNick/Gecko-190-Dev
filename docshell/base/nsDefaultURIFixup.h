@@ -46,6 +46,7 @@
 #include "nsCOMPtr.h"
 
 #include "nsCDefaultURIFixup.h"
+#include "nsIFrame.h"
 
 /* Header file */
 class nsDefaultURIFixup : public nsIURIFixup

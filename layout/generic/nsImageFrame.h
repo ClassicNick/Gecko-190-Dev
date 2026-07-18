@@ -20,7 +20,6 @@
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
- *   L. David Baron <dbaron@dbaron.org>, Mozilla Corporation
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either of the GNU General Public License Version 2 or later (the "GPL"),
@@ -141,8 +140,6 @@ public:
   NS_IMETHOD List(FILE* out, PRInt32 aIndent) const;
 #endif
 
-  virtual PRIntn GetSkipSides() const;
-
   NS_IMETHOD GetImageMap(nsPresContext *aPresContext, nsIImageMap **aImageMap);
 
   NS_IMETHOD GetIntrinsicImageSize(nsSize& aSize);
@@ -164,7 +161,6 @@ public:
                                           nsStyleContext* aStyleContext);
   
   void DisplayAltFeedback(nsIRenderingContext& aRenderingContext,
-                          const nsRect&        aDirtyRect,
                           imgIRequest*         aRequest,
                           nsPoint              aPt);
 
@@ -242,21 +238,19 @@ private:
 
   inline void GetLoadGroup(nsPresContext *aPresContext,
                            nsILoadGroup **aLoadGroup);
-  nscoord GetContinuationOffset() const;
+  nscoord GetContinuationOffset(nscoord* aWidth = 0) const;
   void GetDocumentCharacterSet(nsACString& aCharset) const;
 
   /**
-   * Recalculate mIntrinsicSize from the image.
+   * This function will recalculate mTransform.  If a non-null image
+   * is passed in, mIntrinsicSize will be recalculated from the image
+   * size.  Otherwise, mIntrinsicSize will not be touched.
    *
-   * @return whether aImage's size did _not_
+   * @return PR_TRUE if aImage is non-null and its size did _not_
    *         match our previous intrinsic size
+   * @return PR_FALSE otherwise
    */
-  PRBool UpdateIntrinsicSize(imgIContainer* aImage);
-
-  /**
-   * This function will recalculate mTransform.
-   */
-  void RecalculateTransform();
+  PRBool RecalculateTransform(imgIContainer* aImage);
 
   /**
    * Helper functions to check whether the request or image container
@@ -280,6 +274,8 @@ private:
   nsSize mIntrinsicSize;
   nsTransform2D mTransform;
   
+  nsMargin            mBorderPadding;
+
   static nsIIOService* sIOService;
 
   /* loading / broken image icon support */

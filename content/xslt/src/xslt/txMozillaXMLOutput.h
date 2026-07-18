@@ -39,6 +39,7 @@
 #ifndef TRANSFRMX_MOZILLA_XML_OUTPUT_H
 #define TRANSFRMX_MOZILLA_XML_OUTPUT_H
 
+#include "nsCOMPtr.h"
 #include "txXMLEventHandler.h"
 #include "nsAutoPtr.h"
 #include "nsIScriptLoaderObserver.h"

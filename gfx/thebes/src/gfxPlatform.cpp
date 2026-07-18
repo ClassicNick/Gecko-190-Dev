@@ -35,6 +35,7 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+#include "nsCOMPtr.h"
 #include "gfxPlatform.h"
 
 #if defined(XP_WIN)

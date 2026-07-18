@@ -40,9 +40,9 @@
  * A class for keeping track of prefix-to-namespace-id mappings
  */
 
+#include "nsCOMPtr.h"
 #include "nsXMLNameSpaceMap.h"
 #include "nsIAtom.h"
-#include "nsCOMPtr.h"
 #include "nsINameSpaceManager.h"
 #include "nsContentUtils.h"
 #include "nsGkAtoms.h"

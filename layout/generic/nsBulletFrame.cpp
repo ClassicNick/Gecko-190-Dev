@@ -195,7 +195,7 @@ void nsDisplayBullet::Paint(nsDisplayListBuilder* aBuilder,
      nsIRenderingContext* aCtx, const nsRect& aDirtyRect)
 {
   NS_STATIC_CAST(nsBulletFrame*, mFrame)->
-    PaintBullet(*aCtx, aBuilder->ToReferenceFrame(mFrame), aDirtyRect);
+    PaintBullet(*aCtx, aBuilder->ToReferenceFrame(mFrame));
 }
 
 NS_IMETHODIMP
@@ -212,8 +212,7 @@ nsBulletFrame::BuildDisplayList(nsDisplayListBuilder*   aBuilder,
 }
 
 void
-nsBulletFrame::PaintBullet(nsIRenderingContext& aRenderingContext, nsPoint aPt,
-                           const nsRect& aDirtyRect)
+nsBulletFrame::PaintBullet(nsIRenderingContext& aRenderingContext, nsPoint aPt)
 {
   const nsStyleList* myList = GetStyleList();
   PRUint8 listStyleType = myList->mListStyleType;
@@ -226,11 +225,11 @@ nsBulletFrame::PaintBullet(nsIRenderingContext& aRenderingContext, nsPoint aPt,
       nsCOMPtr<imgIContainer> imageCon;
       mImageRequest->GetImage(getter_AddRefs(imageCon));
       if (imageCon) {
-        nsRect dest(mPadding.left, mPadding.top,
-                    mRect.width - (mPadding.left + mPadding.right),
-                    mRect.height - (mPadding.top + mPadding.bottom));
-        nsLayoutUtils::DrawImage(&aRenderingContext, imageCon,
-                                 dest + aPt, aDirtyRect);
+        nsRect innerArea(0, 0,
+                         mRect.width - (mPadding.left + mPadding.right),
+                         mRect.height - (mPadding.top + mPadding.bottom));
+        nsRect dest(mPadding.left, mPadding.top, innerArea.width, innerArea.height);
+        aRenderingContext.DrawImage(imageCon, innerArea, dest + aPt);
         return;
       }
     }
@@ -1463,6 +1462,8 @@ nsBulletFrame::GetDesiredSize(nsPresContext*  aCX,
   const nsStyleFont* myFont = GetStyleFont();
   nsCOMPtr<nsIFontMetrics> fm = aCX->GetMetricsFor(myFont->mFont);
   nscoord bulletSize;
+  float p2t;
+  float t2p;
 
   nsAutoString text;
   switch (myList->mListStyleType) {
@@ -1474,10 +1475,16 @@ nsBulletFrame::GetDesiredSize(nsPresContext*  aCX,
     case NS_STYLE_LIST_STYLE_DISC:
     case NS_STYLE_LIST_STYLE_CIRCLE:
     case NS_STYLE_LIST_STYLE_SQUARE:
+      t2p = aCX->TwipsToPixels();
       fm->GetMaxAscent(ascent);
-      bulletSize = PR_MAX(nsPresContext::CSSPixelsToAppUnits(MIN_BULLET_SIZE),
-                          NSToCoordRound(0.8f * (float(ascent) / 2.0f)));
-      mPadding.bottom = NSToCoordRound(float(ascent) / 8.0f);
+      bulletSize = NSTwipsToIntPixels(
+        (nscoord)NSToIntRound(0.8f * (float(ascent) / 2.0f)), t2p);
+      if (bulletSize < MIN_BULLET_SIZE) {
+        bulletSize = MIN_BULLET_SIZE;
+      }
+      p2t = aCX->PixelsToTwips();
+      bulletSize = NSIntPixelsToTwips(bulletSize, p2t);
+      mPadding.bottom = NSIntPixelsToTwips((nscoord) NSToIntRound((float)ascent / (8.0f * p2t)),p2t);
       aMetrics.width = mPadding.right + bulletSize;
       aMetrics.ascent = aMetrics.height = mPadding.bottom + bulletSize;
       break;
@@ -1603,10 +1610,11 @@ NS_IMETHODIMP nsBulletFrame::OnStartContainer(imgIRequest *aRequest,
   aImage->GetWidth(&w);
   aImage->GetHeight(&h);
 
+  float p2t;
   nsPresContext* presContext = PresContext();
+  p2t = presContext->PixelsToTwips();
 
-  nsSize newsize(nsPresContext::CSSPixelsToAppUnits(w),
-                 nsPresContext::CSSPixelsToAppUnits(h));
+  nsSize newsize(NSIntPixelsToTwips(w, p2t), NSIntPixelsToTwips(h, p2t));
 
   if (mIntrinsicSize != newsize) {
     mIntrinsicSize = newsize;

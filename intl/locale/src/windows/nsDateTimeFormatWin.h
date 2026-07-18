@@ -98,6 +98,7 @@ private:
 
   nsString    mLocale;
   nsString    mAppLocale;
+  PRBool      mW_API;            // W or A API
   PRUint32    mLCID;             // Windows platform locale ID
 };
 

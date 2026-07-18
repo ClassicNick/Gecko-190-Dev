@@ -178,9 +178,10 @@ NS_IMETHODIMP nsFilePicker::ShowW(PRInt16 *aReturnVal)
     }
     browserInfo.iImage         = nsnull;
 
-    LPITEMIDLIST list = ::SHBrowseForFolderW(&browserInfo);
+    // XXX UNICODE support is needed here --> DONE
+    LPITEMIDLIST list = nsToolkit::mSHBrowseForFolder(&browserInfo);
     if (list != NULL) {
-      result = ::SHGetPathFromIDListW(list, (LPWSTR)fileBuffer);
+      result = nsToolkit::mSHGetPathFromIDList(list, (LPWSTR)fileBuffer);
       if (result) {
           mUnicodeFile.Assign(fileBuffer);
       }
@@ -195,7 +196,11 @@ NS_IMETHODIMP nsFilePicker::ShowW(PRInt16 *aReturnVal)
 
     OPENFILENAMEW ofn;
     memset(&ofn, 0, sizeof(ofn));
+#if _WIN32_WINNT >= 0x0500
+    ofn.lStructSize = OPENFILENAME_SIZE_VERSION_400;
+#else
     ofn.lStructSize = sizeof(ofn);
+#endif
     nsString filterBuffer = mFilterList;
                                   
     if (!initialDir.IsEmpty()) {
@@ -244,11 +249,11 @@ NS_IMETHODIMP nsFilePicker::ShowW(PRInt16 *aReturnVal)
       if (mMode == modeOpen) {
         // FILE MUST EXIST!
         ofn.Flags |= OFN_FILEMUSTEXIST;
-        result = ::GetOpenFileNameW(&ofn);
+        result = nsToolkit::mGetOpenFileName(&ofn);
       }
       else if (mMode == modeOpenMultiple) {
         ofn.Flags |= OFN_FILEMUSTEXIST | OFN_ALLOWMULTISELECT | OFN_EXPLORER;
-        result = ::GetOpenFileNameW(&ofn);
+        result = nsToolkit::mGetOpenFileName(&ofn);
       }
       else if (mMode == modeSave) {
         ofn.Flags |= OFN_NOREADONLYRETURN;
@@ -263,7 +268,7 @@ NS_IMETHODIMP nsFilePicker::ShowW(PRInt16 *aReturnVal)
             StringEndsWith(ext, NS_LITERAL_CSTRING(".url")))
           ofn.Flags |= OFN_NODEREFERENCELINKS;
 
-        result = ::GetSaveFileNameW(&ofn);
+        result = nsToolkit::mGetSaveFileName(&ofn);
         if (!result) {
           // Error, find out what kind.
           if (::GetLastError() == ERROR_INVALID_PARAMETER ||
@@ -271,7 +276,7 @@ NS_IMETHODIMP nsFilePicker::ShowW(PRInt16 *aReturnVal)
             // probably the default file name is too long or contains illegal characters!
             // Try again, without a starting file name.
             ofn.lpstrFile[0] = 0;
-            result = ::GetSaveFileNameW(&ofn);
+            result = nsToolkit::mGetSaveFileName(&ofn);
           }
         }
       }

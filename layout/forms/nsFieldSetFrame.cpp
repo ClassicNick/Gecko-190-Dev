@@ -597,8 +597,9 @@ nsFieldSetFrame::Reflow(nsPresContext*           aPresContext,
           mLegendRect.x = contentRect.width - mLegendRect.width + borderPadding.left;
           break;
         case NS_STYLE_TEXT_ALIGN_CENTER:
-          // Note: rounding removed; there doesn't seem to be any need
-          mLegendRect.x = contentRect.width / 2 - mLegendRect.width / 2 + borderPadding.left;
+          float p2t;
+          p2t = aPresContext->PixelsToTwips();
+          mLegendRect.x = NSIntPixelsToTwips((nscoord) NSToIntRound((float)(contentRect.width/2 - mLegendRect.width/2 + borderPadding.left) / p2t),p2t);
           break;
       }
   

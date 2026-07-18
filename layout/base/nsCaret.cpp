@@ -40,6 +40,7 @@
 
 /* the caret is the text cursor used, e.g., when editing */
 
+#include "nsISupportsUtils.h"
 #include "nsCOMPtr.h"
 
 #include "nsITimer.h"
@@ -124,10 +125,12 @@ NS_IMETHODIMP nsCaret::Init(nsIPresShell *inPresShell)
       mShowDuringSelection = tempInt ? PR_TRUE : PR_FALSE;
   }
   
-  mCaretWidth = presContext->DevPixelsToAppUnits(caretPixelsWidth);
-  mBidiIndicatorSize = presContext->DevPixelsToAppUnits(kMinBidiIndicatorPixels);
-  if (mBidiIndicatorSize < mCaretWidth) {
-    mBidiIndicatorSize = mCaretWidth;
+  float tDevUnitsToTwips;
+  tDevUnitsToTwips = presContext->DeviceContext()->DevUnitsToTwips();
+  mCaretTwipsWidth = (nscoord)(tDevUnitsToTwips * (float)caretPixelsWidth);
+  mBidiIndicatorTwipsSize = (nscoord)(tDevUnitsToTwips * (float)kMinBidiIndicatorPixels);
+  if (mBidiIndicatorTwipsSize < mCaretTwipsWidth) {
+    mBidiIndicatorTwipsSize = mCaretTwipsWidth;
   }
 
   // get the selection from the pres shell, and set ourselves up as a selection
@@ -347,7 +350,7 @@ NS_IMETHODIMP nsCaret::GetCaretCoordinates(EViewCoordinates aRelativeToType,
   outCoordinates->x = viewOffset.x;
   outCoordinates->y = viewOffset.y;
   outCoordinates->height = theFrame->GetSize().height;
-  outCoordinates->width  = mCaretWidth;
+  outCoordinates->width  = mCaretTwipsWidth;
   
   return NS_OK;
 }
@@ -1046,7 +1049,7 @@ nsresult nsCaret::UpdateCaretRects(nsIFrame* aFrame, PRInt32 aFrameOffset)
   }
 
   mCaretRect += framePos;
-  mCaretRect.width = mCaretWidth;
+  mCaretRect.width = mCaretTwipsWidth;
 
   // on RTL frames the right edge of mCaretRect must be equal to framePos
   const nsStyleVisibility* vis = aFrame->GetStyleVisibility();
@@ -1103,10 +1106,10 @@ nsresult nsCaret::UpdateHookRect(nsPresContext* aPresContext)
     // The height of the hook rectangle is the same as the width of the caret
     // rectangle.
     mHookRect.SetRect(mCaretRect.x + ((isCaretRTL) ?
-                      mBidiIndicatorSize * -1 :
+                      mBidiIndicatorTwipsSize * -1 :
                       mCaretRect.width),
-                      mCaretRect.y + mBidiIndicatorSize,
-                      mBidiIndicatorSize,
+                      mCaretRect.y + mBidiIndicatorTwipsSize,
+                      mBidiIndicatorTwipsSize,
                       mCaretRect.width);
   }
 #endif //IBMBIDI

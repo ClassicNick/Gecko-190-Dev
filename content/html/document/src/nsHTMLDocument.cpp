@@ -37,9 +37,9 @@
  * the terms of any one of the MPL, the GPL or the LGPL.
  *
  * ***** END LICENSE BLOCK ***** */
+#include "nsCOMPtr.h"
 #include "nsICharsetAlias.h"
 
-#include "nsCOMPtr.h"
 #include "nsXPIDLString.h"
 #include "nsPrintfCString.h"
 #include "nsReadableUtils.h"
@@ -2715,8 +2715,15 @@ nsHTMLDocument::GetPixelDimensions(nsIPresShell* aShell,
       size = frame->GetSize();
     }
 
-    *aWidth = nsPresContext::AppUnitsToIntCSSPixels(size.width);
-    *aHeight = nsPresContext::AppUnitsToIntCSSPixels(size.height);
+    // Convert from twips to pixels
+    nsPresContext *context = aShell->GetPresContext();
+    if (context) {
+      float scale;
+      scale = context->TwipsToPixels();
+
+      *aWidth = NSTwipsToIntPixels(size.width, scale);
+      *aHeight = NSTwipsToIntPixels(size.height, scale);
+    }
   }
 
   return NS_OK;

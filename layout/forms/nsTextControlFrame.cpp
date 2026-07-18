@@ -36,7 +36,7 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-
+#include "nsISupportsUtils.h"
 #include "nsCOMPtr.h"
 #include "nsTextControlFrame.h"
 #include "nsIDocument.h"
@@ -1298,10 +1298,11 @@ nsTextControlFrame::CalcIntrinsicSize(nsIRenderingContext* aRenderingContext,
   // this if charMaxAdvance != charWidth; if they are equal, this is almost
   // certainly a fixed-width font.
   if (charWidth != charMaxAdvance) {
-    nscoord internalPadding = PR_MAX(0, charMaxAdvance -
-                                        nsPresContext::CSSPixelsToAppUnits(4));
-    nscoord t = nsPresContext::CSSPixelsToAppUnits(1); 
-   // Round to a multiple of t
+    float p2t;
+    p2t = presContext->PixelsToTwips();
+    nscoord internalPadding = PR_MAX(charMaxAdvance - NSToCoordRound(4 * p2t), 0);
+    // round to a multiple of p2t
+    nscoord t = NSToCoordRound(p2t); 
     nscoord rest = internalPadding % t; 
     if (rest < t - rest) {
       internalPadding -= rest;

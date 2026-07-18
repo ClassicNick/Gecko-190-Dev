@@ -36,6 +36,7 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+#include "nsCOMPtr.h"
 #include "nsPrintEngine.h"
 
 #include "nsIStringBundle.h"
@@ -610,7 +611,7 @@ nsPrintEngine::DoCommonPrint(PRBool                  aIsPrintPreview,
 
   mPrt->mPrintDC = do_CreateInstance("@mozilla.org/gfx/devicecontext;1", &rv);
   NS_ENSURE_SUCCESS(rv, rv);
-  rv = mPrt->mPrintDC->InitForPrinting(devspec);
+  rv = mDeviceContext->GetDeviceContextFor(devspec, *getter_AddRefs(mPrt->mPrintDC));
   NS_ENSURE_SUCCESS(rv, rv);
   
   if (aIsPrintPreview) {
@@ -1763,11 +1764,7 @@ nsPrintEngine::ReflowDocList(nsPrintObject* aPO, PRBool aSetPixelScale)
     } else {
       ratio = aPO->mShrinkRatio - 0.005f; // round down
     }
-    aPO->mZoomRatio = ratio;
-  } else if (!mPrt->mShrinkToFit) {
-    double scaling;
-    mPrt->mPrintSettings->GetScaling(&scaling);
-    aPO->mZoomRatio = float(scaling);
+    mPrt->mPrintDC->SetCanonicalPixelScale(ratio*mPrt->mOrigDCScale);
   }
 
   nsresult rv;
@@ -1927,13 +1924,6 @@ nsPrintEngine::ReflowPrintObject(nsPrintObject * aPO)
 
   aPO->mPresContext->SetPageSize(adjSize);
   aPO->mPresContext->SetIsRootPaginatedDocument(documentIsTopLevel);
-  aPO->mPresContext->SetPageScale(aPO->mZoomRatio);
-  // Calculate scale factor from printer to screen
-  PRInt32 printDPI = mPrt->mPrintDC->AppUnitsPerInch() /
-                     mPrt->mPrintDC->AppUnitsPerDevPixel();
-  PRInt32 screenDPI = mDeviceContext->AppUnitsPerInch() /
-                      mDeviceContext->AppUnitsPerDevPixel();
-  aPO->mPresContext->SetPrintPreviewScale(float(screenDPI) / float(printDPI));
 
   rv = aPO->mPresShell->InitialReflow(adjSize.width, adjSize.height);
 
@@ -2170,8 +2160,8 @@ nsPrintEngine::DoPrint(nsPrintObject * aPO)
             if (startPageNum == endPageNum) {
               {
                 nsPresContext* presContext = poPresShell->GetPresContext();
-                startRect.y -= presContext->TwipsToAppUnits(margin.top);
-                endRect.y   -= presContext->TwipsToAppUnits(margin.top);
+                startRect.y -= margin.top;
+                endRect.y   -= margin.top;
                 // XXX This is temporary fix for printing more than one page of a selection
                 pageSequence->SetSelectionHeight(startRect.y, endRect.y+endRect.height-startRect.y);
 
@@ -3038,6 +3028,10 @@ nsPrintEngine::FinishPrintPreview()
 
   SetIsCreatingPrintPreview(PR_FALSE);
 
+  if (mPrt->mPrintDC) {
+    mPrt->mPrintDC->SetAltDevice(nsnull);
+  }
+
   /* cleaup on failure + notify user */
   if (NS_FAILED(rv)) {
     /* cleanup done, let's fire-up an error dialog to notify the user
@@ -3066,6 +3060,11 @@ nsPrintEngine::FinishPrintPreview()
   // then we assign it over
   mPrtPreview = mPrt;
   mPrt        = nsnull;
+
+  // Turning off the scaling of twips so any of the UI scrollbars
+  // will not get scaled
+  mPrtPreview->mPrintObject->mPresContext->SetScalingOfTwips(PR_FALSE);
+  mDeviceContext->SetCanonicalPixelScale(mPrtPreview->mOrigDCScale);
 
 #endif // NS_PRINT_PREVIEW
 

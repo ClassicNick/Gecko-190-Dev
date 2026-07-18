@@ -44,6 +44,7 @@
 #include "nsIDOMEventTarget.h"
 // Helper Classes
 #include "nsCOMPtr.h"
+#include "nsIFrame.h"
 
 //
 // class nsPrintPreviewListener

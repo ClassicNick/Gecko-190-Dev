@@ -167,10 +167,14 @@ NS_IMETHODIMP nsCaretAccessible::NotifySelectionChanged(nsIDOMDocument *aDoc, ns
   if (!widget)
     return NS_OK;
 
-  caretRect.x      = presContext->AppUnitsToDevPixels(caretRect.x);
-  caretRect.y      = presContext->AppUnitsToDevPixels(caretRect.y);
-  caretRect.width  = presContext->AppUnitsToDevPixels(caretRect.width);
-  caretRect.height = presContext->AppUnitsToDevPixels(caretRect.height);
+  float t2p = presContext->TwipsToPixels();
+  
+  // Convert to pixels using that scale
+  caretRect.x      = NSTwipsToIntPixels(caretRect.x, t2p);
+  caretRect.y      = NSTwipsToIntPixels(caretRect.y, t2p);
+
+  caretRect.width  = NSTwipsToIntPixels(caretRect.width, t2p);
+  caretRect.height = NSTwipsToIntPixels(caretRect.height, t2p);
 
   widget->WidgetToScreen(caretRect, mCaretRect);
 

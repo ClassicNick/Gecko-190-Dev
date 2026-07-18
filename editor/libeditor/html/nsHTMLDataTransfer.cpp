@@ -35,9 +35,10 @@
  * the terms of any one of the MPL, the GPL or the LGPL.
  *
  * ***** END LICENSE BLOCK ***** */
+#include "nsCOMPtr.h"
 #include "nsICaret.h"
 
-
+#include "nsCOMPtr.h"
 #include "nsHTMLEditor.h"
 #include "nsHTMLEditRules.h"
 #include "nsTextEditUtils.h"

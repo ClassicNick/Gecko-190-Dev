@@ -459,13 +459,14 @@ nsMathMLFrame::CalcLength(nsPresContext*   aPresContext,
   NS_ASSERTION(aCSSValue.IsLengthUnit(), "not a length unit");
 
   if (aCSSValue.IsFixedLengthUnit()) {
-    return aPresContext->TwipsToAppUnits(aCSSValue.GetLengthTwips());
+    return aCSSValue.GetLengthTwips();
   }
 
   nsCSSUnit unit = aCSSValue.GetUnit();
 
   if (eCSSUnit_Pixel == unit) {
-    return nsPresContext::CSSPixelsToAppUnits(aCSSValue.GetFloatValue());
+    return NSFloatPixelsToTwips(aCSSValue.GetFloatValue(),
+                                aPresContext->ScaledPixelsToTwips());
   }
   else if (eCSSUnit_EM == unit) {
     const nsStyleFont* font = aStyleContext->GetStyleFont();

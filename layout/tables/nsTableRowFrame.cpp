@@ -90,6 +90,7 @@ void
 nsTableRowFrame::InitChildReflowState(nsPresContext&         aPresContext,
                                       const nsSize&           aAvailSize,
                                       PRBool                  aBorderCollapse,
+                                      float                   aPixelsToTwips,
                                       nsTableCellReflowState& aReflowState)
 {
   nsMargin collapseBorder;
@@ -98,7 +99,7 @@ nsTableRowFrame::InitChildReflowState(nsPresContext&         aPresContext,
     // we only reflow cells, so don't need to check frame type
     nsBCTableCellFrame* bcCellFrame = (nsBCTableCellFrame*)aReflowState.frame;
     if (bcCellFrame) {
-      pCollapseBorder = bcCellFrame->GetBorderWidth(collapseBorder);
+      pCollapseBorder = bcCellFrame->GetBorderWidth(aPixelsToTwips, collapseBorder);
     }
   }
   aReflowState.Init(&aPresContext, -1, -1, pCollapseBorder);
@@ -780,6 +781,7 @@ nsTableRowFrame::ReflowChildren(nsPresContext*          aPresContext,
 {
   aStatus = NS_FRAME_COMPLETE;
 
+  GET_PIXELS_TO_TWIPS(aPresContext, p2t);
   PRBool borderCollapse = (((nsTableFrame*)aTableFrame.GetFirstInFlow())->IsBorderCollapse());
 
   // XXXldb Should we be checking constrained height instead?
@@ -808,7 +810,7 @@ nsTableRowFrame::ReflowChildren(nsPresContext*          aPresContext,
       // it's an unknown frame type, give it a generic reflow and ignore the results
       nsTableCellReflowState kidReflowState(aPresContext, aReflowState,
                                             kidFrame, nsSize(0,0), PR_FALSE);
-      InitChildReflowState(*aPresContext, nsSize(0,0), PR_FALSE, kidReflowState);
+      InitChildReflowState(*aPresContext, nsSize(0,0), PR_FALSE, p2t, kidReflowState);
       nsHTMLReflowMetrics desiredSize;
       nsReflowStatus  status;
       ReflowChild(kidFrame, aPresContext, desiredSize, kidReflowState, 0, 0, 0, status);
@@ -887,7 +889,7 @@ nsTableRowFrame::ReflowChildren(nsPresContext*          aPresContext,
         // Reflow the child
         nsTableCellReflowState kidReflowState(aPresContext, aReflowState, 
                                               kidFrame, kidAvailSize, PR_FALSE);
-        InitChildReflowState(*aPresContext, kidAvailSize, borderCollapse,
+        InitChildReflowState(*aPresContext, kidAvailSize, borderCollapse, p2t,
                              kidReflowState);
 
         nsReflowStatus status;
@@ -1070,9 +1072,10 @@ nsTableRowFrame::ReflowCellFrame(nsPresContext*          aPresContext,
   
   nsSize  availSize(cellSize.width, aAvailableHeight);
   PRBool borderCollapse = ((nsTableFrame*)tableFrame->GetFirstInFlow())->IsBorderCollapse();
+  GET_PIXELS_TO_TWIPS(aPresContext, p2t);
   nsTableCellReflowState cellReflowState(aPresContext, aReflowState,
                                          aCellFrame, availSize, PR_FALSE);
-  InitChildReflowState(*aPresContext, availSize, borderCollapse, cellReflowState);
+  InitChildReflowState(*aPresContext, availSize, borderCollapse, p2t, cellReflowState);
   cellReflowState.mFlags.mIsTopOfPage = aIsTopOfPage;
 
   nsHTMLReflowMetrics desiredSize;

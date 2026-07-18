@@ -36,11 +36,11 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-// Local Includes
-#include "nsDOMWindowList.h"
-
 // Helper classes
 #include "nsCOMPtr.h"
+
+// Local Includes
+#include "nsDOMWindowList.h"
 
 // Interfaces needed
 #include "nsIDocument.h"

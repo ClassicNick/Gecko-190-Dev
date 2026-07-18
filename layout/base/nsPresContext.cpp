@@ -144,11 +144,12 @@ IsVisualCharset(const nsCString& aCharset)
 #endif // IBMBIDI
 
 
-PR_STATIC_CALLBACK(PLDHashOperator)
-destroy_loads(const void * aKey, nsCOMPtr<nsImageLoader>& aData, void* closure)
+PR_STATIC_CALLBACK(PRBool) destroy_loads(nsHashKey *aKey, void *aData, void* closure)
 {
-  aData->Destroy();
-  return PL_DHASH_NEXT;
+  nsISupports *sup = NS_REINTERPRET_CAST(nsISupports*, aData);
+  nsImageLoader *loader = NS_REINTERPRET_CAST(nsImageLoader*, sup);
+  loader->Destroy();
+  return PR_TRUE;
 }
 
 static NS_DEFINE_CID(kLookAndFeelCID,  NS_LOOKANDFEEL_CID);
@@ -160,24 +161,23 @@ static NS_DEFINE_CID(kSelectionImageService, NS_SELECTIONIMAGESERVICE_CID);
 
 nsPresContext::nsPresContext(nsIDocument* aDocument, nsPresContextType aType)
   : mType(aType), mDocument(aDocument), mTextZoom(1.0),
-    mPageSize(-1, -1), mPPScale(1.0f),
+    mPageSize(-1, -1),
     mViewportStyleOverflow(NS_STYLE_OVERFLOW_AUTO, NS_STYLE_OVERFLOW_AUTO),
     mImageAnimationModePref(imgIContainer::kNormalAnimMode),
-    // Font sizes default to zero; they will be set in GetFontPreferences
     mDefaultVariableFont("serif", NS_FONT_STYLE_NORMAL, NS_FONT_VARIANT_NORMAL,
-                         NS_FONT_WEIGHT_NORMAL, 0, 0),
-    mDefaultFixedFont("monospace", NS_FONT_STYLE_NORMAL,
-                      NS_FONT_VARIANT_NORMAL, NS_FONT_WEIGHT_NORMAL, 0, 0),
+                         NS_FONT_WEIGHT_NORMAL, 0, NSIntPointsToTwips(12)),
+    mDefaultFixedFont("monospace", NS_FONT_STYLE_NORMAL, NS_FONT_VARIANT_NORMAL,
+                      NS_FONT_WEIGHT_NORMAL, 0, NSIntPointsToTwips(10)),
     mDefaultSerifFont("serif", NS_FONT_STYLE_NORMAL, NS_FONT_VARIANT_NORMAL,
-                      NS_FONT_WEIGHT_NORMAL, 0, 0),
-    mDefaultSansSerifFont("sans-serif", NS_FONT_STYLE_NORMAL,
-                          NS_FONT_VARIANT_NORMAL, NS_FONT_WEIGHT_NORMAL, 0, 0),
-    mDefaultMonospaceFont("monospace", NS_FONT_STYLE_NORMAL,
-                          NS_FONT_VARIANT_NORMAL, NS_FONT_WEIGHT_NORMAL, 0, 0),
-    mDefaultCursiveFont("cursive", NS_FONT_STYLE_NORMAL,
-                        NS_FONT_VARIANT_NORMAL, NS_FONT_WEIGHT_NORMAL, 0, 0),
-    mDefaultFantasyFont("fantasy", NS_FONT_STYLE_NORMAL,
-                        NS_FONT_VARIANT_NORMAL, NS_FONT_WEIGHT_NORMAL, 0, 0),
+                      NS_FONT_WEIGHT_NORMAL, 0, NSIntPointsToTwips(12)),
+    mDefaultSansSerifFont("sans-serif", NS_FONT_STYLE_NORMAL, NS_FONT_VARIANT_NORMAL,
+                          NS_FONT_WEIGHT_NORMAL, 0, NSIntPointsToTwips(12)),
+    mDefaultMonospaceFont("monospace", NS_FONT_STYLE_NORMAL, NS_FONT_VARIANT_NORMAL,
+                          NS_FONT_WEIGHT_NORMAL, 0, NSIntPointsToTwips(10)),
+    mDefaultCursiveFont("cursive", NS_FONT_STYLE_NORMAL, NS_FONT_VARIANT_NORMAL,
+                        NS_FONT_WEIGHT_NORMAL, 0, NSIntPointsToTwips(12)),
+    mDefaultFantasyFont("fantasy", NS_FONT_STYLE_NORMAL, NS_FONT_VARIANT_NORMAL,
+                        NS_FONT_WEIGHT_NORMAL, 0, NSIntPointsToTwips(12)),
     mCanPaginatedScroll(PR_FALSE),
     mIsRootPaginatedDocument(PR_FALSE)
 {
@@ -227,7 +227,7 @@ nsPresContext::nsPresContext(nsIDocument* aDocument, nsPresContextType aType)
 
 nsPresContext::~nsPresContext()
 {
-  mImageLoaders.Enumerate(destroy_loads, nsnull);
+  mImageLoaders.Enumerate(destroy_loads);
 
   NS_PRECONDITION(!mShell, "Presshell forgot to clear our mShell pointer");
   SetShell(nsnull);
@@ -330,8 +330,9 @@ nsPresContext::GetFontPreferences()
   font.minimum-size.[langGroup] = integer - settable by the user
   */
 
-  mDefaultVariableFont.size = CSSPixelsToAppUnits(16);
-  mDefaultFixedFont.size = CSSPixelsToAppUnits(13);
+  float p2t = ScaledPixelsToTwips();
+  mDefaultVariableFont.size = NSFloatPixelsToTwips((float)16, p2t);
+  mDefaultFixedFont.size = NSFloatPixelsToTwips((float)13, p2t);
 
   const char *langGroup;
   mLangGroup->GetUTF8String(&langGroup);
@@ -365,10 +366,10 @@ nsPresContext::GetFontPreferences()
 
   PRInt32 size = nsContentUtils::GetIntPref(pref.get());
   if (unit == eUnit_px) {
-    mMinimumFontSize = CSSPixelsToAppUnits(size);
+    mMinimumFontSize = NSFloatPixelsToTwips((float)size, p2t);
   }
   else if (unit == eUnit_pt) {
-    mMinimumFontSize = this->PointsToAppUnits(size);
+    mMinimumFontSize = NSIntPointsToTwips(size);
   }
 
   // get attributes specific to each generic font
@@ -432,10 +433,10 @@ nsPresContext::GetFontPreferences()
     size = nsContentUtils::GetIntPref(pref.get());
     if (size > 0) {
       if (unit == eUnit_px) {
-        font->size = nsPresContext::CSSPixelsToAppUnits(size);
+        font->size = NSFloatPixelsToTwips((float)size, p2t);
       }
       else if (unit == eUnit_pt) {
-        font->size = this->PointsToAppUnits(size);
+        font->size = NSIntPointsToTwips(size);
       }
     }
 
@@ -657,6 +658,7 @@ nsPresContext::ClearStyleDataAndReflow()
 void
 nsPresContext::PreferenceChanged(const char* aPrefName)
 {
+#ifdef MOZ_CAIRO_GFX
   if (!nsCRT::strcmp(aPrefName, "layout.css.dpi")) {
     nsRect bounds(mVisibleArea);
     bounds *= 1.0f / AppUnitsPerDevPixel();
@@ -672,6 +674,7 @@ nsPresContext::PreferenceChanged(const char* aPrefName)
     }
     return;
   }
+#endif
   // we use a zero-delay timer to coalesce multiple pref updates
   if (!mPrefChangedTimer)
   {
@@ -716,9 +719,6 @@ nsPresContext::Init(nsIDeviceContext* aDeviceContext)
   mDeviceContext = aDeviceContext;
   NS_ADDREF(mDeviceContext);
 
-  if (!mImageLoaders.Init())
-    return NS_ERROR_OUT_OF_MEMORY;
-  
   // Get the look and feel service here; default colors will be initialized
   // from calling GetUserPreferences() when we get a presshell.
   nsresult rv = CallGetService(kLookAndFeelCID, &mLookAndFeel);
@@ -774,9 +774,10 @@ nsPresContext::Init(nsIDeviceContext* aDeviceContext)
   mInitialized = PR_TRUE;
 #endif
 
-  mBorderWidthTable[NS_STYLE_BORDER_WIDTH_THIN] = CSSPixelsToAppUnits(1);
-  mBorderWidthTable[NS_STYLE_BORDER_WIDTH_MEDIUM] = CSSPixelsToAppUnits(3);
-  mBorderWidthTable[NS_STYLE_BORDER_WIDTH_THICK] = CSSPixelsToAppUnits(5);
+  float pixelsToTwips = ScaledPixelsToTwips();
+  mBorderWidthTable[NS_STYLE_BORDER_WIDTH_THIN] = NSIntPixelsToTwips(1, pixelsToTwips);
+  mBorderWidthTable[NS_STYLE_BORDER_WIDTH_MEDIUM] = NSIntPixelsToTwips(3, pixelsToTwips);
+  mBorderWidthTable[NS_STYLE_BORDER_WIDTH_THICK] = NSIntPixelsToTwips(5, pixelsToTwips);
 
   return NS_OK;
 }
@@ -936,12 +937,13 @@ static void SetImgAnimModeOnImgReq(imgIRequest* aImgReq, PRUint16 aMode)
 }
 
  // Enumeration call back for HashTable
-PR_STATIC_CALLBACK(PLDHashOperator)
-set_animation_mode(const void * aKey, nsCOMPtr<nsImageLoader>& aData, void* closure)
+PR_STATIC_CALLBACK(PRBool) set_animation_mode(nsHashKey *aKey, void *aData, void* closure)
 {
-  imgIRequest* imgReq = aData->GetRequest();
+  nsISupports *sup = NS_REINTERPRET_CAST(nsISupports*, aData);
+  nsImageLoader *loader = NS_REINTERPRET_CAST(nsImageLoader*, sup);
+  imgIRequest* imgReq = loader->GetRequest();
   SetImgAnimModeOnImgReq(imgReq, (PRUint16)NS_PTR_TO_INT32(closure));
-  return PL_DHASH_NEXT;
+  return PR_TRUE;
 }
 
 // IMPORTANT: Assumption is that all images for a Presentation 
@@ -1057,6 +1059,47 @@ nsPresContext::GetDefaultFontExternal(PRUint8 aFontID) const
   return GetDefaultFontInternal(aFontID);
 }
 
+float
+nsPresContext::TwipsToPixelsForFonts() const
+{
+  float app2dev;
+#ifdef NS_PRINT_PREVIEW
+  // If an alternative DC is available we want to use
+  // it to get the scaling factor for fonts. Usually, the AltDC
+  // is a printing DC so therefore we need to get the printer's
+  // scaling values for calculating the font heights
+  nsCOMPtr<nsIDeviceContext> altDC;
+  mDeviceContext->GetAltDevice(getter_AddRefs(altDC));
+  if (altDC) {
+    app2dev = altDC->AppUnitsToDevUnits();
+  } else {
+    app2dev = mDeviceContext->AppUnitsToDevUnits();
+  }
+#else
+  app2dev = mDeviceContext->AppUnitsToDevUnits();
+#endif
+  return app2dev;
+}
+
+
+
+float
+nsPresContext::ScaledPixelsToTwips() const
+{
+  float scale;
+  float p2t;
+
+  p2t = mDeviceContext->DevUnitsToAppUnits();
+  if (mDoScaledTwips) {
+    mDeviceContext->GetCanonicalPixelScale(scale);
+    scale = p2t * scale;
+  } else {
+    scale = p2t;
+  }
+
+  return scale;
+}
+
 void
 nsPresContext::SetTextZoomExternal(float aZoom)
 {
@@ -1067,21 +1110,25 @@ imgIRequest*
 nsPresContext::LoadImage(imgIRequest* aImage, nsIFrame* aTargetFrame)
 {
   // look and see if we have a loader for the target frame.
-  nsCOMPtr<nsImageLoader> loader;
-  mImageLoaders.Get(aTargetFrame, getter_AddRefs(loader));
+
+  nsVoidKey key(aTargetFrame);
+  nsImageLoader *loader = NS_REINTERPRET_CAST(nsImageLoader*, mImageLoaders.Get(&key)); // addrefs
 
   if (!loader) {
     loader = new nsImageLoader();
     if (!loader)
       return nsnull;
 
+    NS_ADDREF(loader); // new
+
     loader->Init(aTargetFrame, this);
-    mImageLoaders.Put(aTargetFrame, loader);
+    mImageLoaders.Put(&key, loader);
   }
 
   loader->Load(aImage);
 
   imgIRequest *request = loader->GetRequest();
+  NS_RELEASE(loader);
 
   return request;
 }
@@ -1090,13 +1137,14 @@ nsPresContext::LoadImage(imgIRequest* aImage, nsIFrame* aTargetFrame)
 void
 nsPresContext::StopImagesFor(nsIFrame* aTargetFrame)
 {
-  nsCOMPtr<nsImageLoader> loader;
-  mImageLoaders.Get(aTargetFrame, getter_AddRefs(loader));
+  nsVoidKey key(aTargetFrame);
+  nsImageLoader *loader = NS_REINTERPRET_CAST(nsImageLoader*, mImageLoaders.Get(&key)); // addrefs
 
   if (loader) {
     loader->Destroy();
+    NS_RELEASE(loader);
 
-    mImageLoaders.Remove(aTargetFrame);
+    mImageLoaders.Remove(&key);
   }
 }
 

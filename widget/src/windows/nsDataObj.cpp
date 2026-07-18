@@ -77,6 +77,10 @@
   const IID IID_IAsyncOperation = {0x3D8B0590, 0xF691, 0x11d2, {0x8E, 0xA9, 0x00, 0x60, 0x97, 0xDF, 0x5B, 0xD4}};
 #endif
 
+#ifndef CFSTR_PERFORMEDDROPEFFECT
+#define CFSTR_PERFORMEDDROPEFFECT TEXT("Performed DropEffect") 
+#endif
+
 #if 0
 #define PRNTDEBUG(_x) printf(_x);
 #define PRNTDEBUG2(_x1, _x2) printf(_x1, _x2);
@@ -336,11 +340,14 @@ STDMETHODIMP nsDataObj::QueryInterface(REFIID riid, void** ppv)
 		*ppv = this;
 		AddRef();
 		return S_OK;
-  } else if (IID_IAsyncOperation == riid) {
+  } 
+#if !defined (_MSC_VER) || _MSC_VER >= 1200
+	else if (IID_IAsyncOperation == riid) {
     *ppv = static_cast<IAsyncOperation*>(this);
     AddRef();
     return S_OK;
   }
+#endif
 
 	return ResultFromScode(E_NOINTERFACE);
 }

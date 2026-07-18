@@ -41,7 +41,8 @@
 #include "nsIDOMSVGAnimatedString.h"
 #include "nsSVGLengthList.h"
 #include "nsIDOMSVGLength.h"
-#include "gfxPath.h"
+
+class nsSVGFlattenedPath;
 #include "nsStubMutationObserver.h"
 
 class nsSVGTextPathFrame;
@@ -92,7 +93,7 @@ public:
 #endif
 
   // nsSVGTextPathFrame methods:
-  already_AddRefed<gfxFlattenedPath> GetFlattenedPath();
+  nsSVGFlattenedPath *GetFlattenedPath();
   nsIFrame *GetPathFrame();
 
 protected:

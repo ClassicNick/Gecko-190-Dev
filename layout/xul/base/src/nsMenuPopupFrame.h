@@ -45,9 +45,9 @@
 #ifndef nsMenuPopupFrame_h__
 #define nsMenuPopupFrame_h__
 
+#include "nsCOMPtr.h"
 #include "prtypes.h"
 #include "nsIAtom.h"
-#include "nsCOMPtr.h"
 #include "nsIDOMEventReceiver.h"
 #include "nsMenuListener.h"
 

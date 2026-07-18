@@ -97,10 +97,6 @@ XPIDLSRCS = \
 	nsIXULRuntime.idl \
 	$(NULL)
 
-ifeq ($(OS_ARCH),WINNT)
-XPIDLSRCS += nsIWinAppHelper.idl
-endif
-
 EXPORTS = \
 	xrecore.h \
 	nsXULAppAPI.h \

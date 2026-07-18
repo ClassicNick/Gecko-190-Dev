@@ -89,6 +89,7 @@
 #include "nsIComponentRegistrar.h"
 #include "nsPluginLogging.h"
 #include "nsIPrefBranch2.h"
+#include "nsIFrame.h"
 #include "nsIScriptChannel.h"
 #include "nsPrintfCString.h"
 

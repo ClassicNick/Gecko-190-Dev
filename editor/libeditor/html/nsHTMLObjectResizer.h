@@ -54,6 +54,7 @@
 #include "nsIDOMEventListener.h"
 #include "nsISelectionListener.h"
 #include "nsIDOMMouseMotionListener.h"
+#include "nsIFrame.h"
 
 #define kTopLeft       NS_LITERAL_STRING("nw")
 #define kTop           NS_LITERAL_STRING("n")

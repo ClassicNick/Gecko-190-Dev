@@ -44,12 +44,13 @@
 #include "nsWeakReference.h"
 #include "nsGkAtoms.h"
 #include "nsSVGGeometryFrame.h"
-#include "gfxRect.h"
 
 class nsPresContext;
 class nsIDOMSVGMatrix;
 class nsSVGMarkerFrame;
+class nsISVGFilterFrame;
 class nsSVGMarkerProperty;
+class nsISVGCairoCanvas;
 
 typedef nsSVGGeometryFrame nsSVGPathGeometryFrameBase;
 
@@ -95,7 +96,7 @@ public:
 
 protected:
   // nsISVGChildFrame interface:
-  NS_IMETHOD PaintSVG(nsSVGRenderState *aContext, nsRect *aDirtyRect);
+  NS_IMETHOD PaintSVG(nsISVGRendererCanvas* canvas, nsRect *aDirtyRect);
   NS_IMETHOD GetFrameForPointSVG(float x, float y, nsIFrame** hit);
   NS_IMETHOD_(nsRect) GetCoveredRegion();
   NS_IMETHOD UpdateCoveredRegion();
@@ -113,19 +114,23 @@ protected:
   virtual PRUint16 GetHittestMask();
 
 private:
-  void Render(nsSVGRenderState *aContext);
-  void GeneratePath(gfxContext *aContext);
+  void Render(nsISVGRendererCanvas *aCanvas);
+  void GeneratePath(cairo_t *ctx, nsISVGCairoCanvas* aCanvas);
 
   /*
    * Check for what cairo returns for the fill extents of a degenerate path
    *
+   * @param xmin the minimum x value in user units
+   * @param ymin the minimum y value in user units
+   * @param xmax the maximum x value in user units
+   * @param ymax the maximum y value in user units
+   *
    * @return PR_TRUE if the path is degenerate
    */
   static PRBool
-  IsDegeneratePath(const gfxRect& rect)
+  IsDegeneratePath(double xmin, double ymin, double xmax, double ymax)
   {
-    return (rect.X() == 0 && rect.Y() == 0 &&
-            rect.Width() == 0 && rect.Height() == 0);
+    return (xmin == 0 && ymin == 0 && xmax == 0 && ymax == 0);
   }
 
   nsSVGMarkerProperty *GetMarkerProperty();

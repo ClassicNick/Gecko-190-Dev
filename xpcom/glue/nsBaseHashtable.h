@@ -62,7 +62,9 @@ private:
   typedef typename KeyClass::KeyTypePointer KeyTypePointer;
   
   nsBaseHashtableET(KeyTypePointer aKey);
+#if !defined (_MSC_VER) || _MSC_VER >= 1200
   nsBaseHashtableET(nsBaseHashtableET<KeyClass,DataType>& toCopy);
+#endif
   ~nsBaseHashtableET();
 };
 
@@ -300,12 +302,14 @@ nsBaseHashtableET<KeyClass,DataType>::nsBaseHashtableET(KeyTypePointer aKey) :
   KeyClass(aKey)
 { }
 
+#if !defined (_MSC_VER) || _MSC_VER >= 1200
 template<class KeyClass,class DataType>
 nsBaseHashtableET<KeyClass,DataType>::nsBaseHashtableET
   (nsBaseHashtableET<KeyClass,DataType>& toCopy) :
   KeyClass(toCopy),
   mData(toCopy.mData)
 { }
+#endif
 
 template<class KeyClass,class DataType>
 nsBaseHashtableET<KeyClass,DataType>::~nsBaseHashtableET()

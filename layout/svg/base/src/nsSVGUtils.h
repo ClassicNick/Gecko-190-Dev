@@ -60,6 +60,7 @@ class nsIDOMSVGMatrix;
 class nsIURI;
 class nsSVGOuterSVGFrame;
 class nsIPresShell;
+class nsISVGRendererCanvas;
 class nsIDOMSVGAnimatedPreserveAspectRatio;
 class nsISVGValueObserver;
 class nsIAtom;
@@ -67,11 +68,7 @@ class nsSVGLength2;
 class nsSVGElement;
 class nsSVGSVGElement;
 class nsAttrValue;
-class gfxContext;
-class gfxASurface;
 class nsIRenderingContext;
-struct gfxRect;
-struct gfxMatrix;
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -80,20 +77,23 @@ struct gfxMatrix;
 // SVG Frame state bits
 #define NS_STATE_IS_OUTER_SVG         0x00100000
 
-#define NS_STATE_SVG_CLIPPED          0x00200000
-#define NS_STATE_SVG_FILTERED         0x00400000
-#define NS_STATE_SVG_MASKED           0x00800000
+#define NS_STATE_SVG_CLIPPED_TRIVIAL  0x00200000
+#define NS_STATE_SVG_CLIPPED_COMPLEX  0x00400000
+#define NS_STATE_SVG_CLIPPED_MASK     0x00600000
 
-#define NS_STATE_SVG_HAS_MARKERS      0x01000000
+#define NS_STATE_SVG_FILTERED         0x00800000
+#define NS_STATE_SVG_MASKED           0x01000000
 
-#define NS_STATE_SVG_DIRTY            0x02000000
+#define NS_STATE_SVG_HAS_MARKERS      0x02000000
 
-#define NS_STATE_SVG_FILL_PSERVER     0x04000000
-#define NS_STATE_SVG_STROKE_PSERVER   0x08000000
-#define NS_STATE_SVG_PSERVER_MASK     0x0c000000
+#define NS_STATE_SVG_DIRTY            0x04000000
+
+#define NS_STATE_SVG_FILL_PSERVER     0x08000000
+#define NS_STATE_SVG_STROKE_PSERVER   0x10000000
+#define NS_STATE_SVG_PSERVER_MASK     0x18000000
 
 /* are we the child of a non-display container? */
-#define NS_STATE_SVG_NONDISPLAY_CHILD 0x10000000
+#define NS_STATE_SVG_NONDISPLAY_CHILD 0x20000000
 
 /**
  * Byte offsets of channels in a native packed gfxColor or cairo image surface.
@@ -117,41 +117,6 @@ struct gfxMatrix;
  * to cairo.h usage) can still query this information.
  */
 PRBool NS_SVGEnabled();
-
-class nsSVGRenderState
-{
-public:
-  enum RenderMode { NORMAL, CLIP, CLIP_MASK };
-
-  nsSVGRenderState(nsIRenderingContext *aContext);
-  nsSVGRenderState(gfxContext *aContext);
-
-  nsIRenderingContext *GetRenderingContext() { return mRenderingContext; }
-  gfxContext *GetGfxContext() { return mGfxContext; }
-
-  void SetRenderMode(RenderMode aMode) { mRenderMode = aMode; }
-  RenderMode GetRenderMode() { return mRenderMode; }
-
-private:
-  RenderMode           mRenderMode;
-  nsIRenderingContext *mRenderingContext;
-  gfxContext          *mGfxContext;
-};
-
-class nsAutoSVGRenderMode
-{
-public:
-  nsAutoSVGRenderMode(nsSVGRenderState *aState,
-                      nsSVGRenderState::RenderMode aMode) : mState(aState) {
-    mOriginalMode = aState->GetRenderMode();
-    aState->SetRenderMode(aMode);
-  }
-  ~nsAutoSVGRenderMode() { mState->SetRenderMode(mOriginalMode); }
-
-private:
-  nsSVGRenderState            *mState;
-  nsSVGRenderState::RenderMode mOriginalMode;
-};
 
 class nsSVGUtils
 {
@@ -255,7 +220,7 @@ public:
   /* Paint frame with SVG effects - aDirtyRect is the area being
    * redrawn, in frame offset pixel coordinates */
   static void
-  PaintChildWithEffects(nsSVGRenderState *aContext,
+  PaintChildWithEffects(nsISVGRendererCanvas *aCanvas,
                         nsRect *aDirtyRect,
                         nsIFrame *aFrame);
 
@@ -301,8 +266,6 @@ public:
    */
   static nsRect
   ToBoundingPixelRect(double xmin, double ymin, double xmax, double ymax);
-  static nsRect
-  ToBoundingPixelRect(const gfxRect& rect);
 
   /*
    * Get a pointer to a surface that can be used to create cairo
@@ -310,20 +273,18 @@ public:
    */
   static cairo_surface_t *
   GetCairoComputationalSurface();
-  static gfxASurface *
-  GetThebesComputationalSurface();
+
+  /*
+   * A singular matrix is a non invertible square matrix.
+   */
+  static PRBool
+  IsSingular(const cairo_matrix_t *aMatrix);
 
   /*
    * Convert a nsIDOMSVGMatrix to a cairo_matrix_t.
    */
   static cairo_matrix_t
   ConvertSVGMatrixToCairo(nsIDOMSVGMatrix *aMatrix);
-
-  /*
-   * Convert a nsIDOMSVGMatrix to a gfxMatrix.
-   */
-  static gfxMatrix
-  ConvertSVGMatrixToThebes(nsIDOMSVGMatrix *aMatrix);
 
   /*
    * Hit test a given rectangle/matrix.
@@ -341,14 +302,6 @@ public:
                    double *xmin, double *ymin,
                    double *xmax, double *ymax);
 
-  static void CompositeSurfaceMatrix(gfxContext *aContext,
-                                     gfxASurface *aSurface,
-                                     nsIDOMSVGMatrix *aCTM, float aOpacity);
-
-  static void SetClipRect(gfxContext *aContext,
-                          nsIDOMSVGMatrix *aCTM, float aX, float aY,
-                          float aWidth, float aHeight);
-
   /* Using group opacity instead of fill or stroke opacity on a
    * geometry object seems to be a common authoring mistake.  If we're
    * not applying filters and not both stroking and filling, we can
@@ -358,9 +311,8 @@ public:
   CanOptimizeOpacity(nsIFrame *aFrame);
 
 private:
-  /* Computational (nil) surfaces */
+  /* Cairo computational (nil) surface */
   static cairo_surface_t *mCairoComputationalSurface;
-  static gfxASurface *mThebesComputationalSurface;
 };
 
 #endif

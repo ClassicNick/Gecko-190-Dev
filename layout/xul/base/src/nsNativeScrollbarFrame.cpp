@@ -257,22 +257,24 @@ nsNativeScrollbarFrame::GetPrefSize(nsBoxLayoutState& aState)
 {
   nsSize size(0,0);
   DISPLAY_PREF_SIZE(this, size);
-
+  float p2t = 0.0;
+  p2t = aState.PresContext()->PixelsToTwips();
+  
   PRInt32 narrowDimension = 0;
   nsCOMPtr<nsINativeScrollbar> native ( do_QueryInterface(mScrollbar) );
   if ( !native ) return size;
   native->GetNarrowSize(&narrowDimension);
-
+  
   if ( IsVertical() )
-    size.width = aState.PresContext()->DevPixelsToAppUnits(narrowDimension);
+    size.width = nscoord(narrowDimension * p2t);
   else
-    size.height = aState.PresContext()->DevPixelsToAppUnits(narrowDimension);
-
+    size.height = nscoord(narrowDimension * p2t);
+  
   // By now, we have both the content node for the scrollbar and the associated
   // scrollbar mediator (for outliner, if applicable). Hook up the scrollbar to
   // gecko
   Hookup();
-
+    
   return size;
 }
 

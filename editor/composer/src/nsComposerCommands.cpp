@@ -39,7 +39,7 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-
+#include "nsCOMPtr.h"
 #include "nsIEditor.h"
 #include "nsIHTMLEditor.h"
 #include "nsIHTMLAbsPosEditor.h"

@@ -78,8 +78,10 @@ ifdef MOZ_X11
 endif
 
 ifdef _MSC_VER
+ifneq ($(_MSC_VER), 1100)
 CSRCS   += fbmmx.c
 DEFINES += -DUSE_MMX
+endif
 endif
 
 EXPORTS		= pixman.h pixman-remap.h

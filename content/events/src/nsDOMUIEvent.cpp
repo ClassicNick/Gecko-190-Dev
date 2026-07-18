@@ -129,8 +129,7 @@ nsPoint nsDOMUIEvent::GetScreenPoint() {
   nsRect bounds(mEvent->refPoint, nsSize(1, 1));
   nsRect offset;
   ((nsGUIEvent*)mEvent)->widget->WidgetToScreen ( bounds, offset );
-  return nsPoint(nsPresContext::AppUnitsToIntCSSPixels(mPresContext->DevPixelsToAppUnits(offset.x)),
-                 nsPresContext::AppUnitsToIntCSSPixels(mPresContext->DevPixelsToAppUnits(offset.y)));
+  return offset.TopLeft();
 }
 
 nsPoint nsDOMUIEvent::GetClientPoint() {
@@ -224,8 +223,7 @@ nsPoint nsDOMUIEvent::GetClientPoint() {
     }
   }
   
-  return nsPoint(nsPresContext::AppUnitsToIntCSSPixels(mPresContext->DevPixelsToAppUnits(pt.x)),
-                 nsPresContext::AppUnitsToIntCSSPixels(mPresContext->DevPixelsToAppUnits(pt.y)));
+  return pt;
 }
 
 NS_IMETHODIMP
@@ -262,6 +260,7 @@ nsDOMUIEvent::GetPagePoint()
   if (((nsGUIEvent*)mEvent)->widget) {
     // Native event; calculate using presentation
     nsPoint pt(0, 0);
+	float t2p = mPresContext->TwipsToPixels();
     nsIScrollableFrame* scrollframe =
             mPresContext->PresShell()->GetRootScrollFrameAsScrollable();
     if (scrollframe)
@@ -269,8 +268,8 @@ nsDOMUIEvent::GetPagePoint()
     nsIFrame* rootFrame = mPresContext->PresShell()->GetRootFrame();
     if (rootFrame)
       pt += nsLayoutUtils::GetEventCoordinatesRelativeTo(mEvent, rootFrame);
-    return nsPoint(nsPresContext::AppUnitsToIntCSSPixels(pt.x),
-                   nsPresContext::AppUnitsToIntCSSPixels(pt.y));
+    return nsPoint(NSTwipsToIntPixels(pt.x, t2p),
+                   NSTwipsToIntPixels(pt.y, t2p));
   }
 
   return GetClientPoint();
@@ -374,15 +373,19 @@ nsPoint nsDOMUIEvent::GetLayerPoint() {
       !mPresContext) {
     return nsPoint(0,0);
   }
+
+  // XXX This is supposed to be relative to the nearest view?
+  // Any element can have a view, not just positioned ones.
   // XXX I'm not really sure this is correct; it's my best shot, though
+  float t2p = mPresContext->TwipsToPixels();
   nsIFrame* targetFrame;
   mPresContext->EventStateManager()->GetEventTarget(&targetFrame);
   if (!targetFrame)
     return nsPoint(0,0);
   nsIFrame* layer = nsLayoutUtils::GetClosestLayer(targetFrame);
   nsPoint pt(nsLayoutUtils::GetEventCoordinatesRelativeTo(mEvent, layer));
-  pt.x =  nsPresContext::AppUnitsToIntCSSPixels(pt.x);
-  pt.y =  nsPresContext::AppUnitsToIntCSSPixels(pt.y);
+  pt.x =  NSTwipsToIntPixels(pt.x, t2p);
+  pt.y =  NSTwipsToIntPixels(pt.y, t2p);
   return pt;
 }
 

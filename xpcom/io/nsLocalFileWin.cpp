@@ -47,6 +47,7 @@
 #include "nsLocalFile.h"
 #include "nsIDirectoryEnumerator.h"
 #include "nsNativeCharsetUtils.h"
+#include "nsWinAPIs.h"
 
 #include "nsISimpleEnumerator.h"
 #include "nsIComponentManager.h"
@@ -130,14 +131,18 @@ private:
     PRLock*       mLock;
     IPersistFile* mPersistFile;
     // Win 95 and 98 don't have IShellLinkW
-    IShellLinkW*  mShellLink;
+    union 
+    {
+        IShellLinkW*  W;
+        IShellLinkA*  A;
+    } mShellLink; 
 };
 
 ShortcutResolver::ShortcutResolver()
 {
     mLock = nsnull;
     mPersistFile = nsnull;
-    mShellLink  = nsnull;
+    mShellLink.W   = nsnull;
 }
 
 ShortcutResolver::~ShortcutResolver()
@@ -150,8 +155,16 @@ ShortcutResolver::~ShortcutResolver()
         mPersistFile->Release();
 
     // Release the pointer to the IShellLink interface.
-    if (mShellLink)
-        mShellLink->Release();
+    if (NS_UseUnicode())
+    {
+        if (mShellLink.W)
+            mShellLink.W->Release();
+    }
+    else
+    {
+        if (mShellLink.A)
+            mShellLink.A->Release();
+    }
 
     CoUninitialize();
 }
@@ -166,19 +179,36 @@ ShortcutResolver::Init()
         return NS_ERROR_FAILURE;
 
     HRESULT hres; 
-    hres = CoCreateInstance(CLSID_ShellLink,
-                            NULL,
-                            CLSCTX_INPROC_SERVER,
-                            IID_IShellLinkW,
-                            (void**)&(mShellLink));
-    if (SUCCEEDED(hres))
+    if (NS_UseUnicode())
     {
-        // Get a pointer to the IPersistFile interface.
-        hres = mShellLink->QueryInterface(IID_IPersistFile,
-                                          (void**)&mPersistFile);
+        hres = CoCreateInstance(CLSID_ShellLink,
+                                NULL,
+                                CLSCTX_INPROC_SERVER,
+                                IID_IShellLinkW,
+                                (void**)&(mShellLink.W));
+        if (SUCCEEDED(hres))
+        {
+            // Get a pointer to the IPersistFile interface.
+            hres = mShellLink.W->QueryInterface(IID_IPersistFile,
+                                                (void**)&mPersistFile);
+        }
+    }
+    else 
+    {
+        hres = CoCreateInstance(CLSID_ShellLink,
+                                NULL,
+                                CLSCTX_INPROC_SERVER,
+                                IID_IShellLinkA,
+                                (void**)&(mShellLink.A));
+        if (SUCCEEDED(hres))
+        {
+            // Get a pointer to the IPersistFile interface.
+            hres = mShellLink.A->QueryInterface(IID_IPersistFile,
+                                                (void**)&mPersistFile);
+        }
     }
 
-    if (mPersistFile == nsnull || mShellLink == nsnull)
+    if (mPersistFile == nsnull || mShellLink.W == nsnull)
         return NS_ERROR_FAILURE;
 
     return NS_OK;
@@ -197,14 +227,20 @@ ShortcutResolver::Resolve(const WCHAR* in, WCHAR* out)
         return NS_ERROR_FAILURE;
 
     // Resolve the link.
-    hres = mShellLink->Resolve(nsnull, SLR_NO_UI);
+    hres = mShellLink.W->Resolve(nsnull, SLR_NO_UI );
 
     if (FAILED(hres))
         return NS_ERROR_FAILURE;
 
     // Get the path to the link target.
-    hres = mShellLink->GetPath(out, MAX_PATH, NULL, SLGP_UNCPRIORITY);
-
+    if (NS_UseUnicode()) 
+        hres = mShellLink.W->GetPath( out, MAX_PATH, NULL, SLGP_UNCPRIORITY );
+    else {
+        char tmp[MAX_PATH];
+        hres = mShellLink.A->GetPath( tmp, MAX_PATH, NULL, SLGP_UNCPRIORITY );
+        if (SUCCEEDED(hres))
+            NS_ConvertAtoW(tmp, MAX_PATH, out);
+    }
     if (FAILED(hres))
         return NS_ERROR_FAILURE;
     return NS_OK;
@@ -395,9 +431,9 @@ OpenFile(const nsAFlatString &name, PRIntn osflags, PRIntn mode,
             flags = OPEN_EXISTING;
     }
 
-    HANDLE file = ::CreateFileW(name.get(), access,
-                                FILE_SHARE_READ|FILE_SHARE_WRITE,
-                                NULL, flags, flag6, NULL);
+    HANDLE file = nsWinAPIs::mCreateFile(name.get(), access,
+                                         FILE_SHARE_READ|FILE_SHARE_WRITE,
+                                         NULL, flags, flag6, NULL);
 
     if (file == INVALID_HANDLE_VALUE) { 
         *fd = nsnull;
@@ -449,7 +485,13 @@ GetFileInfo(const nsAFlatString &name, PRFileInfo64 *info)
     if (name.IsEmpty() || name.FindCharInSet(L"?*") != kNotFound)
         return NS_ERROR_INVALID_ARG;
 
-    if (!::GetFileAttributesExW(name.get(), GetFileExInfoStandard, &fileData))
+    // GetFileAttributesExW/A were confirmed to work correctly
+    // with a filename ending with a slash and a root directory except on Win95
+    // without MS IE 4 or later (see |mGetFileAttributesEx| in nsWinAPIs.cpp.)
+    // Therefore, we don't need to add a fallback as done in 
+    // _PR_MD_GETFILEINFO64 (w95io.c)
+    if (!nsWinAPIs::mGetFileAttributesEx(name.get(), GetFileExInfoStandard,
+                                         &fileData))
         return ConvertWinError(GetLastError());
 
     if (fileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
@@ -476,7 +518,11 @@ GetFileInfo(const nsAFlatString &name, PRFileInfo64 *info)
 struct nsDir
 {
     HANDLE   handle; 
-    WIN32_FIND_DATAW data;
+    union
+    {
+        WIN32_FIND_DATAW dataW;
+        WIN32_FIND_DATAA dataA;
+    } entry;
     PRBool   firstEntry;
 };
 
@@ -504,8 +550,14 @@ OpenDir(const nsAFlatString &name, nsDir * *dir)
 
     filename.ReplaceChar(L'/', L'\\');
 
-    d->handle = ::FindFirstFileW(filename.get(), &(d->data) );
-
+    if (NS_UseUnicode()) 
+        d->handle = ::FindFirstFileW(filename.get(), &(d->entry.dataW) );
+    else
+    {
+        nsCAutoString filenameA;
+        NS_CopyUnicodeToNative(filename, filenameA);
+        d->handle = ::FindFirstFileA(filenameA.get(), &(d->entry.dataA) );
+    }
     if ( d->handle == INVALID_HANDLE_VALUE )
     {
         PR_Free(d);
@@ -530,14 +582,25 @@ ReadDir(nsDir *dir, PRDirFlags flags, nsString& name)
             dir->firstEntry = PR_FALSE;
             rv = 1;
         } else
-            rv = ::FindNextFileW(dir->handle, &(dir->data));
+            if (NS_UseUnicode())
+                rv = ::FindNextFileW(dir->handle, &(dir->entry.dataW));
+            else 
+                rv = ::FindNextFileA(dir->handle, &(dir->entry.dataA));
 
         if (rv == 0)
             break;
 
         const PRUnichar *fileName;
         nsString tmp;
-        fileName = (dir)->data.cFileName;
+        if (NS_UseUnicode()) 
+            fileName = (dir)->entry.dataW.cFileName;
+        else 
+        {
+            NS_CopyNativeToUnicode(nsDependentCString((dir)->
+                                                      entry.dataA.cFileName),
+                                   tmp);
+            fileName = tmp.get();
+        }
 
         if ((flags & PR_SKIP_DOT) &&
             (fileName[0] == L'.') && (fileName[1] == L'\0'))
@@ -547,7 +610,11 @@ ReadDir(nsDir *dir, PRDirFlags flags, nsString& name)
             (fileName[2] == L'\0'))
             continue;
 
-        DWORD attrib =  dir->data.dwFileAttributes;
+        // Perhaps, we can just get away with using entry.dataW.dwFileAttributes
+        // because dwFileAttributes is the first field of both WIN32_FIND_DATAW
+        // and WIN32_FIND_DATAA, but let's be on the safe side here.
+        DWORD attrib = NS_UseUnicode() ? dir->entry.dataW.dwFileAttributes :
+                                         dir->entry.dataA.dwFileAttributes;
         if ((flags & PR_SKIP_HIDDEN) && (attrib & FILE_ATTRIBUTE_HIDDEN))
             continue;
 
@@ -946,7 +1013,8 @@ nsLocalFile::OpenANSIFileDesc(const char *mode, FILE * *_retval)
     if (NS_FAILED(rv) && rv != NS_ERROR_FILE_NOT_FOUND)
         return rv;
 
-    *_retval = _wfopen(mResolvedPath.get(), NS_ConvertASCIItoUTF16(mode).get());
+    *_retval = nsWinAPIs::mFopen(mResolvedPath.get(), 
+                                 NS_ConvertASCIItoUTF16(mode).get());
     if (*_retval)
         return NS_OK;
 
@@ -1006,7 +1074,7 @@ nsLocalFile::Create(PRUint32 type, PRUint32 attributes)
         {
             *slash = L'\0';
 
-            if (!::CreateDirectoryW(mResolvedPath.get(), NULL)) {
+            if (!nsWinAPIs::mCreateDirectory(mResolvedPath.get(), NULL)) {
                 rv = ConvertWinError(GetLastError());
                 // perhaps the base path already exists, or perhaps we don't have
                 // permissions to create the directory.  NOTE: access denied could
@@ -1035,7 +1103,7 @@ nsLocalFile::Create(PRUint32 type, PRUint32 attributes)
 
     if (type == DIRECTORY_TYPE)
     {
-        if (!::CreateDirectoryW(mResolvedPath.get(), NULL))
+        if (!nsWinAPIs::mCreateDirectory(mResolvedPath.get(), NULL))
             return ConvertWinError(GetLastError());
         else
             return NS_OK;
@@ -1146,8 +1214,8 @@ nsLocalFile::Normalize()
         WCHAR cwd[MAX_PATH];
         WCHAR * pcwd = cwd;
         int drive = TOUPPER(path.First()) - 'A' + 1;
-        if (!_wgetdcwd(drive, pcwd, MAX_PATH))
-            pcwd = _wgetdcwd(drive, 0, 0);
+        if (!nsWinAPIs::mGetDCwd(drive, pcwd, MAX_PATH))
+            pcwd = nsWinAPIs::mGetDCwd(drive, 0, 0);
         if (!pcwd)
             return NS_ERROR_OUT_OF_MEMORY;
 
@@ -1327,8 +1395,14 @@ nsLocalFile::GetVersionInfoField(const char* aField, nsAString& _retval)
     WCHAR *path = NS_CONST_CAST(WCHAR*, mFollowSymlinks ? mResolvedPath.get() 
                                                         : mWorkingPath.get());
 
+    // Per http://msdn.microsoft.com/library/default.asp?url=/library/en-us/winui/winui/windowsuserinterface/resources/versioninformation/versioninformationreference/versioninformationfunctions/getfileversioninfosize.asp
+    // if the "short" version of this file name is > 125 characters, 
+    // GetFileVersionInfoSize will not work (for Win9x compatibility)
+    WCHAR shortPath[126];
+    nsWinAPIs::mGetShortPathName(path, shortPath, sizeof(shortPath));
+
     DWORD dummy;
-    DWORD size = ::GetFileVersionInfoSizeW(path, &dummy);
+    DWORD size = nsWinAPIs::mGetFileVersionInfoSize(shortPath, &dummy);
     if (!size)
         return rv;
 
@@ -1336,7 +1410,7 @@ nsLocalFile::GetVersionInfoField(const char* aField, nsAString& _retval)
     if (!ver)
         return NS_ERROR_OUT_OF_MEMORY;
 
-    if (::GetFileVersionInfoW(path, 0, size, ver)) 
+    if (nsWinAPIs::mGetFileVersionInfo(path, 0, size, ver)) 
     {
         LANGANDCODEPAGE* translate = nsnull;
         UINT pageCount;
@@ -1421,7 +1495,7 @@ nsLocalFile::CopySingleFile(nsIFile *sourceFile, nsIFile *destParent,
     int copyOK;
 
     if (!move)
-        copyOK = ::CopyFileW(filePath.get(), destPath.get(), PR_TRUE);
+        copyOK = nsWinAPIs::mCopyFile(filePath.get(), destPath.get(), PR_TRUE);
     else
     {
         // What we have to do is check to see if the destPath exists.  If it
@@ -1448,15 +1522,15 @@ nsLocalFile::CopySingleFile(nsIFile *sourceFile, nsIFile *destParent,
                 // the file doesn't exist but that's ok, because 
                 // _wremove() will also silently fail if the file
                 // doesn't exist.
-               (void)_wchmod(backup.get(), _S_IREAD | _S_IWRITE);
+               nsWinAPIs::mChmod(backup.get(), _S_IREAD | _S_IWRITE);
 
                 // remove any existing backup file that we may already have.
                 // maybe we should be doing some kind of unique naming here,
                 // but why bother.
-               (void)_wremove(backup.get());
+                nsWinAPIs::mRemove(backup.get());
 
                 // move destination file to backup file
-                copyOK = ::MoveFileW(destPath.get(), backup.get());
+                copyOK = nsWinAPIs::mMoveFile(destPath.get(), backup.get());
                 if (!copyOK)
                 {
                     // I guess we can't do the backup copy, so return.
@@ -1466,19 +1540,20 @@ nsLocalFile::CopySingleFile(nsIFile *sourceFile, nsIFile *destParent,
             }
         }
         // move source file to destination file
-        copyOK = ::MoveFileW(filePath.get(), destPath.get());
+        copyOK = nsWinAPIs::mMoveFile(filePath.get(), destPath.get());
 
         if (!backup.IsEmpty())
         {
             if (copyOK)
             {
                 // remove the backup copy.
-                _wremove(backup.get());
+                nsWinAPIs::mRemove(backup.get());
             }
             else
             {
                 // restore backup
-                int backupOk = ::MoveFileW(backup.get(), destPath.get());
+                int backupOk = nsWinAPIs::mMoveFile(backup.get(),
+                                                    destPath.get());
                 NS_ASSERTION(backupOk, "move backup failed");
             }
         }
@@ -1848,11 +1923,11 @@ nsLocalFile::Remove(PRBool recursive)
                     file->Remove(recursive);
             }
         }
-        rv = _wrmdir(mWorkingPath.get());
+        rv = nsWinAPIs::mRmdir(mWorkingPath.get());
     }
     else
     {
-        rv = _wremove(mWorkingPath.get());
+        rv = nsWinAPIs::mRemove(mWorkingPath.get());
     }
 
     // fixup error code if necessary...
@@ -1951,13 +2026,13 @@ nsLocalFile::SetLastModifiedTimeOfLink(PRInt64 aLastModifiedTime)
 nsresult
 nsLocalFile::SetModDate(PRInt64 aLastModifiedTime, const PRUnichar *filePath)
 {
-    HANDLE file = ::CreateFileW(filePath,          // pointer to name of the file
-                                GENERIC_WRITE,     // access (write) mode
-                                0,                 // share mode
-                                NULL,              // pointer to security attributes
-                                OPEN_EXISTING,     // how to create
-                                0,                 // file attributes
-                                NULL);
+    HANDLE file = nsWinAPIs::mCreateFile(filePath, // pointer to name of the file
+                              GENERIC_WRITE,     // access (write) mode
+                              0,                 // share mode
+                              NULL,              // pointer to security attributes
+                              OPEN_EXISTING,     // how to create
+                              0,                 // file attributes
+                              NULL);
 
     if (file == INVALID_HANDLE_VALUE)
     {
@@ -2030,7 +2105,7 @@ nsLocalFile::GetPermissionsOfLink(PRUint32 *aPermissions)
     // and to have found that this file is a link. It is not 
     // possible for a link file to be executable.
 
-    DWORD word = ::GetFileAttributesW(mWorkingPath.get());
+    DWORD word = nsWinAPIs::mGetFileAttributes(mWorkingPath.get());
     if (word == INVALID_FILE_ATTRIBUTES)
         return NS_ERROR_FILE_INVALID_PATH;
 
@@ -2064,7 +2139,7 @@ nsLocalFile::SetPermissions(PRUint32 aPermissions)
     if (aPermissions & (PR_IWUSR|PR_IWGRP|PR_IWOTH))    // any write
         mode |= _S_IWRITE;
 
-    if (_wchmod(mResolvedPath.get(), mode) == -1)
+    if (nsWinAPIs::mChmod(mResolvedPath.get(), mode) == -1)
         return NS_ERROR_FAILURE;
 
     return NS_OK;
@@ -2083,7 +2158,7 @@ nsLocalFile::SetPermissionsOfLink(PRUint32 aPermissions)
     if (aPermissions & (PR_IWUSR|PR_IWGRP|PR_IWOTH))    // any write
         mode |= _S_IWRITE;
 
-    if (_wchmod(mWorkingPath.get(), mode) == -1)
+    if (nsWinAPIs::mChmod(mWorkingPath.get(), mode) == -1)
         return NS_ERROR_FAILURE;
 
     return NS_OK;
@@ -2133,13 +2208,13 @@ nsLocalFile::SetFileSize(PRInt64 aFileSize)
     if (NS_FAILED(rv))
         return rv;
 
-    HANDLE hFile = ::CreateFileW(mResolvedPath.get(),// pointer to name of the file
-                                 GENERIC_WRITE,      // access (write) mode
-                                 FILE_SHARE_READ,    // share mode
-                                 NULL,               // pointer to security attributes
-                                 OPEN_EXISTING,          // how to create
-                                 FILE_ATTRIBUTE_NORMAL,  // file attributes
-                                 NULL);
+    HANDLE hFile = nsWinAPIs::mCreateFile(mResolvedPath.get(), // pointer to name of the file
+                               GENERIC_WRITE,            // access (write) mode
+                               FILE_SHARE_READ,          // share mode
+                               NULL,                     // pointer to security attributes
+                               OPEN_EXISTING,            // how to create
+                               FILE_ATTRIBUTE_NORMAL,    // file attributes
+                               NULL);
     if (hFile == INVALID_HANDLE_VALUE)
     {
         return ConvertWinError(GetLastError());
@@ -2171,8 +2246,10 @@ nsLocalFile::GetDiskSpaceAvailable(PRInt64 *aDiskSpaceAvailable)
     ResolveAndStat();
 
     ULARGE_INTEGER liFreeBytesAvailableToCaller, liTotalNumberOfBytes;
-    if (::GetDiskFreeSpaceExW(mResolvedPath.get(), &liFreeBytesAvailableToCaller, 
-                              &liTotalNumberOfBytes, NULL))
+    if (nsWinAPIs::mGetDiskFreeSpaceEx(mResolvedPath.get(), 
+                                       &liFreeBytesAvailableToCaller, 
+                                       &liTotalNumberOfBytes, 
+                                       NULL))
     {
         *aDiskSpaceAvailable = liFreeBytesAvailableToCaller.QuadPart;
         return NS_OK;
@@ -2465,7 +2542,7 @@ nsLocalFile::HasFileAttribute(DWORD fileAttrib, PRBool *_retval)
     // get the file attributes for the correct item depending on following symlinks
     const PRUnichar *filePath = mFollowSymlinks ? 
                                 mResolvedPath.get() : mWorkingPath.get();
-    DWORD word = ::GetFileAttributesW(filePath);
+    DWORD word = nsWinAPIs::mGetFileAttributes(filePath);
 
     *_retval = ((word & fileAttrib) != 0);
     return NS_OK;
@@ -2683,8 +2760,9 @@ nsLocalFile::Reveal()
     explorerParams.Append(mResolvedPath);
     explorerParams.Append(L'\"');
 
-    if (::ShellExecuteW(NULL, L"open", explorerPath.get(), explorerParams.get(),
-                        NULL, SW_SHOWNORMAL) <= (HINSTANCE) 32)
+    if (nsWinAPIs::mShellExecute(NULL, L"open", explorerPath.get(),
+                                 explorerParams.get(),
+                                 NULL, SW_SHOWNORMAL) <= (HINSTANCE) 32)
         return NS_ERROR_FAILURE;
 
     return NS_OK;
@@ -2697,15 +2775,16 @@ nsLocalFile::Launch()
     const nsString &path = mWorkingPath;
 
     // use the app registry name to launch a shell execute....
-    LONG r = (LONG) ::ShellExecuteW(NULL, NULL, path.get(), NULL, NULL,
-                                    SW_SHOWNORMAL);
+    LONG r = (LONG) nsWinAPIs::mShellExecute( NULL, NULL, path.get(),
+                                              NULL, NULL, SW_SHOWNORMAL);
 
     // if the file has no association, we launch windows' "what do you want to do" dialog
     if (r == SE_ERR_NOASSOC) {
         nsAutoString shellArg;
         shellArg.Assign(NS_LITERAL_STRING("shell32.dll,OpenAs_RunDLL ") + path);
-        r = (LONG) ::ShellExecuteW(NULL, NULL, L"RUNDLL32.EXE", shellArg.get(),
-                                   NULL, SW_SHOWNORMAL);
+        r = (LONG) nsWinAPIs::mShellExecute(NULL, NULL, L"RUNDLL32.EXE",
+                                            shellArg.get(),
+                                            NULL, SW_SHOWNORMAL);
     }
     if (r < 32) {
         switch (r) {
@@ -2927,8 +3006,9 @@ nsLocalFile::EnsureShortPath()
         return;
 
     WCHAR thisshort[MAX_PATH];
-    DWORD thisr = ::GetShortPathNameW(mWorkingPath.get(), thisshort,
-                                      sizeof(thisshort));
+    DWORD thisr = nsWinAPIs::
+                  mGetShortPathName(mWorkingPath.get(), thisshort,
+                                    sizeof(thisshort));
     if (thisr < sizeof(thisshort))
         mShortWorkingPath.Assign(thisshort);
     else

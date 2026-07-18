@@ -200,8 +200,8 @@ class nsDerivedSafe : public T
       using T::AddRef;
       using T::Release;
 #else
-      nsrefcnt AddRef(void);
-      nsrefcnt Release(void);
+      NS_IMETHOD_(nsrefcnt) AddRef(void);
+      NS_IMETHOD_(nsrefcnt) Release(void);
 #endif
 
 #if !defined(AIX) && !defined(IRIX)

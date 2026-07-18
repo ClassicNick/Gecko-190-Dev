@@ -44,6 +44,7 @@
 #include "nsISupportsArray.h"
 #include "nsIStyleRuleProcessor.h"
 #include "nsCOMArray.h"
+#include "nsIFrame.h"
 
 class nsIContent;
 class nsIAtom;

@@ -116,12 +116,11 @@ nsFeedSniffer::ConvertEncodedData(nsIRequest* request,
   return rv;
 }
 
-template<int N>
 static PRBool
 StringBeginsWithLowercaseLiteral(nsAString& aString,
-                                 const char (&aSubstring)[N])
+                                 const char* aSubstring, int N)
 {
-  return StringHead(aString, N).LowerCaseEqualsLiteral(aSubstring);
+  return StringHead(aString, N).LowerCaseEqualsLiteral((const char*)aSubstring);
 }
 
 // XXXsayrer put this in here to get on the branch with minimal delay.
@@ -160,13 +159,13 @@ HasAttachmentDisposition(nsIHttpChannel* httpChannel)
            // Content-Disposition: ; filename="file"
            // screen those out here.
            !dispToken.IsEmpty() &&
-           !StringBeginsWithLowercaseLiteral(dispToken, "inline") &&
+           !StringBeginsWithLowercaseLiteral(dispToken, "inline", sizeof("inline")) &&
            // Broken sites just send
            // Content-Disposition: filename="file"
            // without a disposition token... screen those out.
-           !StringBeginsWithLowercaseLiteral(dispToken, "filename")) &&
+           !StringBeginsWithLowercaseLiteral(dispToken, "filename", sizeof("filename"))) &&
           // Also in use is Content-Disposition: name="file"
-          !StringBeginsWithLowercaseLiteral(dispToken, "name"))
+		  !StringBeginsWithLowercaseLiteral(dispToken, "name", sizeof("name")))
         // We have a content-disposition of "attachment" or unknown
         return PR_TRUE;
     }

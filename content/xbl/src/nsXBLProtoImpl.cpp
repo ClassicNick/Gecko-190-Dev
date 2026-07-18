@@ -36,6 +36,7 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+#include "nsCOMPtr.h"
 #include "nsXBLProtoImpl.h"
 #include "nsIContent.h"
 #include "nsIDocument.h"

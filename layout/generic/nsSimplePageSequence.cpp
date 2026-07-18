@@ -121,7 +121,7 @@ nsSimplePageSequenceFrame::nsSimplePageSequenceFrame(nsStyleContext* aContext) :
   // XXX Unsafe to assume successful allocation
   mPageData = new nsSharedPageData();
   mPageData->mHeadFootFont = new nsFont(*PresContext()->GetDefaultFont(kGenericFont_serif));
-  mPageData->mHeadFootFont->size = PresContext()->PointsToAppUnits(10);
+  mPageData->mHeadFootFont->size = NSIntPointsToTwips(10);
 
   nsresult rv;
   mPageData->mPrintOptions = do_GetService(sPrintOptionsContractID, &rv);
@@ -215,8 +215,13 @@ nsSimplePageSequenceFrame::Reflow(nsPresContext*          aPresContext,
     return NS_OK;
   }
 
+  // Turn on the scaling of twips so any of the scrollbars
+  // in the UI no longer get scaled
   PRBool isPrintPreview =
     aPresContext->Type() == nsPresContext::eContext_PrintPreview;
+  if (isPrintPreview) {
+    aPresContext->SetScalingOfTwips(PR_TRUE);
+  }
 
   // See if we can get a Print Settings from the Context
   if (!mPageData->mPrintSettings &&
@@ -226,12 +231,7 @@ nsSimplePageSequenceFrame::Reflow(nsPresContext*          aPresContext,
 
   // now get out margins
   if (mPageData->mPrintSettings) {
-    nsMargin marginTwips;
-    mPageData->mPrintSettings->GetMarginInTwips(marginTwips);
-    mMargin = nsMargin(aPresContext->TwipsToAppUnits(marginTwips.left),
-                       aPresContext->TwipsToAppUnits(marginTwips.top),
-                       aPresContext->TwipsToAppUnits(marginTwips.right),
-                       aPresContext->TwipsToAppUnits(marginTwips.bottom));
+    mPageData->mPrintSettings->GetMarginInTwips(mMargin);
     PRInt16 printType;
     mPageData->mPrintSettings->GetPrintRange(&printType);
     mPrintRangeType = printType;
@@ -266,7 +266,7 @@ nsSimplePageSequenceFrame::Reflow(nsPresContext*          aPresContext,
   nsSize   shadowSize(0,0);
   if (aPresContext->IsScreen()) {
     extraMargin.SizeTo(extraGap, extraGap, extraGap, extraGap);
-    nscoord fourPixels = nsPresContext::CSSPixelsToAppUnits(4);
+    nscoord fourPixels = aPresContext->IntScaledPixelsToTwips(4);
     shadowSize.SizeTo(fourPixels, fourPixels);
   }
 
@@ -366,10 +366,8 @@ nsSimplePageSequenceFrame::Reflow(nsPresContext*          aPresContext,
 #endif
 
   // Return our desired size
-  // Adjustr the reflow size by PrintPreviewScale so the scrollbars end up the
-  // correct size
-  aDesiredSize.height  = y * PresContext()->GetPrintPreviewScale(); // includes page heights and dead space
-  aDesiredSize.width   = (x + availSize.width + deadSpaceGap) * PresContext()->GetPrintPreviewScale();
+  aDesiredSize.height  = y; // includes page heights and dead space
+  aDesiredSize.width   = x + availSize.width + deadSpaceGap;
 
   aDesiredSize.mOverflowArea = nsRect(0, 0, aDesiredSize.width,
                                       aDesiredSize.height);
@@ -379,6 +377,12 @@ nsSimplePageSequenceFrame::Reflow(nsPresContext*          aPresContext,
   // for the other reflows that happen
   mSize.width  = aDesiredSize.width;
   mSize.height = aDesiredSize.height;
+
+  // Turn off the scaling of twips so any of the scrollbars
+  // in the document get scaled
+  if (isPrintPreview) {
+    aPresContext->SetScalingOfTwips(PR_FALSE);
+  }
 
   NS_FRAME_TRACE_REFLOW_OUT("nsSimplePageSequeceFrame::Reflow", aStatus);
   NS_FRAME_SET_TRUNCATION(aStatus, aReflowState, aDesiredSize);
@@ -477,6 +481,7 @@ nsSimplePageSequenceFrame::StartPrint(nsPresContext*   aPresContext,
 
   aPrintSettings->GetStartPageRange(&mFromPageNum);
   aPrintSettings->GetEndPageRange(&mToPageNum);
+  aPrintSettings->GetMarginInTwips(mMargin);
 
   mDoingPageRange = nsIPrintSettings::kRangeSpecifiedPageRange == mPrintRangeType ||
                     nsIPrintSettings::kRangeSelection == mPrintRangeType;
@@ -674,43 +679,7 @@ nsSimplePageSequenceFrame::DoPageEnd()
   return rv;
 }
 
-static void PaintPageSequence(nsIFrame* aFrame, nsIRenderingContext* aCtx,
-                             const nsRect& aDirtyRect, nsPoint aPt)
-{
-  NS_STATIC_CAST(nsSimplePageSequenceFrame*, aFrame)->PaintPageSequence(*aCtx, aDirtyRect, aPt);
-}
-
 //------------------------------------------------------------------------------
-void
-nsSimplePageSequenceFrame::PaintPageSequence(nsIRenderingContext& aRenderingContext,
-                                             const nsRect&        aDirtyRect,
-                                             nsPoint              aPt) {
-  nsRect rect = aDirtyRect;
-  float scale = PresContext()->GetPrintPreviewScale();
-  aRenderingContext.PushState();
-  nsPoint framePos = aPt;
-  aRenderingContext.Translate(framePos.x, framePos.y);
-  rect -= framePos;
-  aRenderingContext.Scale(scale, scale);
-  rect.ScaleRoundOut(1.0f / scale);
-
-  // Now the rect and the rendering coordinates are are relative to this frame.
-  // Loop over the pages and paint them.
-  nsIFrame* child = GetFirstChild(nsnull);
-  while (child) {
-    nsPoint pt = child->GetPosition();
-    // The rendering context has to be translated before each call to PaintFrame
-    aRenderingContext.PushState();
-    aRenderingContext.Translate(pt.x, pt.y);
-    nsLayoutUtils::PaintFrame(&aRenderingContext, child,
-                              nsRegion(rect - pt), NS_RGBA(0,0,0,0));
-    aRenderingContext.PopState();
-    child = child->GetNextSibling();
-  }
-
-  aRenderingContext.PopState();
-}
-
 NS_IMETHODIMP
 nsSimplePageSequenceFrame::BuildDisplayList(nsDisplayListBuilder*   aBuilder,
                                             const nsRect&           aDirtyRect,
@@ -719,11 +688,10 @@ nsSimplePageSequenceFrame::BuildDisplayList(nsDisplayListBuilder*   aBuilder,
   nsresult rv = DisplayBorderBackgroundOutline(aBuilder, aLists);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  rv = aLists.Content()->AppendNewToTop(new (aBuilder)
-        nsDisplayGeneric(this, ::PaintPageSequence, "PageSequence"));
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  return NS_OK;
+  // Treat each page as a psuedo-stack so everything goes in the Content() list.
+  return
+    BuildDisplayListForNonBlockChildren(aBuilder, aDirtyRect, aLists,
+                                        DISPLAY_CHILD_FORCE_PSEUDO_STACKING_CONTEXT);
 }
 
 nsIAtom*

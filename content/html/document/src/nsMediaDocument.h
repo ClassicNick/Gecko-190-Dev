@@ -38,6 +38,7 @@
 #ifndef nsMediaDocument_h___
 #define nsMediaDocument_h___
 
+#include "nsCOMPtr.h"
 #include "nsHTMLDocument.h"
 #include "nsGenericHTMLElement.h"
 #include "nsAutoPtr.h"

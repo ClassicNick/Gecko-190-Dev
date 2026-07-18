@@ -433,19 +433,19 @@ NS_IMETHODIMP _class::QueryInterface(REFNSIID aIID, void** aInstancePtr)      \
   static const QITableEntry table[] = {
 
 #define NS_INTERFACE_TABLE_ENTRY(_class, _interface)                          \
-  { &_interface::COMTypeInfo<int>::kIID,                                      \
+  { &NS_GET_IID(_interface),                                      \
     NS_REINTERPRET_CAST(char*,                                                \
-                        NS_STATIC_CAST(_interface*, (_class*) 0x1000)) -      \
-    NS_REINTERPRET_CAST(char*, (_class*) 0x1000)                              \
+	NS_STATIC_CAST(_interface*, (::_class*) 0x1000)) -      \
+	NS_REINTERPRET_CAST(char*, (::_class*) 0x1000)                              \
   },
 
 #define NS_INTERFACE_TABLE_ENTRY_AMBIGUOUS(_class, _interface, _implClass)    \
-  { &_interface::COMTypeInfo<int>::kIID,                                      \
+  { &NS_GET_IID(_interface),                                      \
     NS_REINTERPRET_CAST(char*,                                                \
                         NS_STATIC_CAST(_interface*,                           \
                                        NS_STATIC_CAST(_implClass*,            \
-                                                      (_class*) 0x1000))) -   \
-    NS_REINTERPRET_CAST(char*, (_class*) 0x1000)                              \
+									   (::_class*) 0x1000))) -   \
+									   NS_REINTERPRET_CAST(char*, (::_class*) 0x1000)                              \
   },
 
 #define NS_INTERFACE_TABLE_END                                                \

@@ -40,6 +40,7 @@
 #define nsContentTestNode_h__
 
 #include "nscore.h"
+#include "nsCOMPtr.h"
 #include "nsRuleNetwork.h"
 #include "nsFixedSizeAllocator.h"
 #include "nsIAtom.h"

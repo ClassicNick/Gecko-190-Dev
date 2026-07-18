@@ -51,6 +51,10 @@
 #include "cairo-clip-private.h"
 #include "cairo-win32-private.h"
 
+#ifndef ETO_PDY
+#define ETO_PDY                      0x2000
+#endif
+
 #undef DEBUG_COMPOSITE
 
 /* for older SDKs */

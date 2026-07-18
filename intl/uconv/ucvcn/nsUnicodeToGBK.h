@@ -46,8 +46,8 @@
 #ifndef nsUnicodeToGBK_h___
 #define nsUnicodeToGBK_h___
 
-#include "nsUCSupport.h"
 #include "nsCOMPtr.h"
+#include "nsUCSupport.h"
 #include "nsIUnicodeEncoder.h"
 #include "gbku.h"
 //----------------------------------------------------------------------

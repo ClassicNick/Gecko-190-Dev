@@ -43,6 +43,7 @@
 
 #include "nsCOMPtr.h"
 #include "nsVoidArray.h"
+#include "nsIFrame.h"
 
 class nsIDocShellTreeItem;
 

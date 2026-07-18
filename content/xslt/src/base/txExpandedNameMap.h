@@ -165,7 +165,7 @@ public:
         clearItems();
     }
 
-    class iterator : public iterator_base
+	class iterator : public ::txExpandedNameMap_base::iterator_base
     {
     public:
         iterator(txExpandedNameMap& aMap)
@@ -219,7 +219,7 @@ public:
         clearItems();
     }
 
-    class iterator : public iterator_base
+	class iterator : public ::txExpandedNameMap_base::iterator_base
     {
     public:
         iterator(txOwningExpandedNameMap& aMap)

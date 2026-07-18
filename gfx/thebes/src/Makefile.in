@@ -63,7 +63,15 @@ CPPSRCS	+= 	gfxWindowsFonts.cpp \
 		$(NULL)
 CPPSRCS +=	gfxPDFSurface.cpp
 
+ifdef MOZ_ENABLE_CAIRO_GFX
+CPPSRCS	+= 	gfxWindowsFonts.cpp \
+		$(NULL
+endif
+		
+ifdef MOZ_ENABLE_CAIRO_GFX
 _OS_LIBS	= usp10
+endif
+
 ifdef GNU_CXX
 _OS_LIBS	+= uuid
 endif

@@ -39,9 +39,9 @@
 // This defines a common base class for nsITheme implementations, to reduce
 // code duplication.
 
+#include "nsCOMPtr.h"
 #include "prtypes.h"
 #include "nsIAtom.h"
-#include "nsCOMPtr.h"
 #include "nsString.h"
 #include "nsMargin.h"
 #include "nsILookAndFeel.h"

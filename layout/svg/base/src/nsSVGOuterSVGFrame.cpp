@@ -38,12 +38,15 @@
 
 #include "nsSVGOuterSVGFrame.h"
 #include "nsIDOMSVGSVGElement.h"
+#include "nsISVGRenderer.h"
 #include "nsSVGSVGElement.h"
 #include "nsSVGTextFrame.h"
+#include "nsIServiceManager.h"
+#include "nsIViewManager.h"
 #include "nsSVGRect.h"
 #include "nsDisplayList.h"
+#include "nsISVGRendererCanvas.h"
 #include "nsStubMutationObserver.h"
-#include "gfxContext.h"
 
 #if defined(DEBUG) && defined(SVG_DEBUG_PRINTING)
 #include "nsIDeviceContext.h"
@@ -159,6 +162,13 @@ nsSVGOuterSVGFrame::nsSVGOuterSVGFrame(nsStyleContext* aContext)
 NS_IMETHODIMP
 nsSVGOuterSVGFrame::InitSVG()
 {
+  nsresult rv;
+
+  mRenderer = do_CreateInstance(NS_SVG_RENDERER_CAIRO_CONTRACTID, &rv);
+  NS_ASSERTION(mRenderer, "could not get SVG renderer");
+  if (NS_FAILED(rv))
+    return rv;
+  
   nsCOMPtr<nsISVGSVGElement> SVGElement = do_QueryInterface(mContent);
   NS_ASSERTION(SVGElement, "wrong content element");
 
@@ -202,6 +212,16 @@ nsSVGOuterSVGFrame::Reflow(nsPresContext*          aPresContext,
                            const nsHTMLReflowState& aReflowState,
                            nsReflowStatus&          aStatus)
 {
+#if defined(DEBUG) && defined(SVG_DEBUG_PRINTING)
+  {
+    printf("nsSVGOuterSVGFrame(%p)::Reflow()[\n",this);
+    float twipsPerScPx = aPresContext->ScaledPixelsToTwips();
+    float twipsPerPx = aPresContext->PixelsToTwips();
+    printf("tw/sc(px)=%f tw/px=%f\n", twipsPerScPx, twipsPerPx);
+    printf("]\n");
+  }
+#endif
+  
   if (!aReflowState.ShouldReflowAllKids()) {
     // We're not the target of the incremental reflow, so just bail.
     // This means that something happened to one of our descendants
@@ -231,17 +251,20 @@ nsSVGOuterSVGFrame::Reflow(nsPresContext*          aPresContext,
   nsCOMPtr<nsISVGSVGElement> SVGElement = do_QueryInterface(mContent);
   NS_ENSURE_TRUE(SVGElement, NS_ERROR_FAILURE);
 
+  float pxPerTwips = GetPxPerTwips();
+  float twipsPerPx = GetTwipsPerPx();
+
   // The width/height attribs given on the <svg>-element might be
   // percentage values of the parent viewport. We will set the parent
   // coordinate context dimensions to the available space.
 
   nsRect maxRect, preferredRect;
   CalculateAvailableSpace(&maxRect, &preferredRect, aPresContext, aReflowState);
-  float preferredWidth = nsPresContext::AppUnitsToFloatCSSPixels(preferredRect.width);
-  float preferredHeight = nsPresContext::AppUnitsToFloatCSSPixels(preferredRect.height);
+  float preferredWidth = preferredRect.width * pxPerTwips;
+  float preferredHeight = preferredRect.height * pxPerTwips;
 
-  SuspendRedraw();
-
+  SuspendRedraw(); 
+  
   nsCOMPtr<nsIDOMSVGRect> r;
   NS_NewSVGRect(getter_AddRefs(r), 0, 0, preferredWidth, preferredHeight);
 
@@ -282,10 +305,8 @@ nsSVGOuterSVGFrame::Reflow(nsPresContext*          aPresContext,
 
   nsSVGSVGElement *svg = NS_STATIC_CAST(nsSVGSVGElement*, mContent);
 
-  aDesiredSize.width =
-    nsPresContext::CSSPixelsToAppUnits(svg->mViewportWidth);
-  aDesiredSize.height =
-    nsPresContext::CSSPixelsToAppUnits(svg->mViewportHeight);
+  aDesiredSize.width = (int)(svg->mViewportWidth*twipsPerPx);
+  aDesiredSize.height = (int)(svg->mViewportHeight*twipsPerPx);
 
   // XXX add in CSS borders ??
 
@@ -399,11 +420,11 @@ nsSVGOuterSVGFrame::GetFrameForPoint(const nsPoint& aPoint)
   // singly-linked list we have to test each and every SVG element for
   // a hit. What we really want is a double-linked list.
 
-  float x = PresContext()->AppUnitsToDevPixels(aPoint.x);
-  float y = PresContext()->AppUnitsToDevPixels(aPoint.y);
+  float x = GetPxPerTwips() * aPoint.x;
+  float y = GetPxPerTwips() * aPoint.y;
 
   nsRect thisRect(nsPoint(0,0), GetSize());
-  if (!thisRect.Contains(aPoint)) {
+  if (!thisRect.Contains(aPoint) || !mRenderer) {
     return nsnull;
   }
 
@@ -469,27 +490,32 @@ nsSVGOuterSVGFrame::Paint(nsIRenderingContext& aRenderingContext,
   PRTime start = PR_Now();
 #endif
 
-  dirtyRect.ScaleRoundOut(1.0f / PresContext()->AppUnitsPerDevPixel());
+  // If we don't have a renderer due to the component failing
+  // to load (gdi+ or cairo not available), indicate to the user
+  // what's going on by drawing a red "X" at the appropriate spot.
+  if (!mRenderer) {
+    aRenderingContext.SetColor(NS_RGB(255,0,0));
+    aRenderingContext.DrawLine(0, 0, mRect.width, mRect.height);
+    aRenderingContext.DrawLine(mRect.width, 0, 0, mRect.height);
+    aRenderingContext.PopState();
+    return;
+  }
 
-  nsSVGRenderState ctx(&aRenderingContext);
+  dirtyRect.ScaleRoundOut(GetPxPerTwips());
 
-  // nquartz fallback paths, which svg tends to trigger, need
-  // a non-window context target
-#ifdef XP_MACOSX
-  ctx.GetGfxContext()->PushGroup(gfxASurface::CONTENT_COLOR_ALPHA);
-#endif
+  nsCOMPtr<nsISVGRendererCanvas> canvas;
+  mRenderer->CreateCanvas(&aRenderingContext, PresContext(), dirtyRect,
+                          getter_AddRefs(canvas));
 
   // paint children:
   for (nsIFrame* kid = mFrames.FirstChild(); kid;
        kid = kid->GetNextSibling()) {
-    nsSVGUtils::PaintChildWithEffects(&ctx, &dirtyRect, kid);
+    nsSVGUtils::PaintChildWithEffects(canvas, &dirtyRect, kid);
   }
 
-// show the surface we pushed earlier for nquartz fallbacks
-#ifdef XP_MACOSX
-  ctx.GetGfxContext()->PopGroupToSource();
-  ctx.GetGfxContext()->Paint();
-#endif
+  canvas->Flush();
+
+  canvas = nsnull;
 
 #if defined(DEBUG) && defined(SVG_DEBUG_PAINT_TIMING)
   PRTime end = PR_Now();
@@ -511,8 +537,19 @@ nsSVGOuterSVGFrame::GetType() const
 nsresult
 nsSVGOuterSVGFrame::InvalidateRect(nsRect aRect)
 {
-  aRect.ScaleRoundOut(PresContext()->AppUnitsPerDevPixel());
-  Invalidate(aRect);
+  // just ignore invalidates if painting is suppressed by the shell
+  PRBool suppressed = PR_FALSE;
+  PresContext()->PresShell()->IsPaintingSuppressed(&suppressed);
+  if (suppressed)
+    return NS_OK;
+  
+  nsIView* view = GetClosestView();
+  NS_ENSURE_TRUE(view, NS_ERROR_FAILURE);
+
+  nsIViewManager* vm = view->GetViewManager();
+
+  aRect.ScaleRoundOut(GetTwipsPerPx());
+  vm->UpdateView(view, aRect, NS_VMREFRESH_NO_SYNC);
 
   return NS_OK;
 }
@@ -523,6 +560,14 @@ nsSVGOuterSVGFrame::IsRedrawSuspended()
   return (mRedrawSuspendCount>0) || !mViewportInitialized;
 }
 
+nsresult
+nsSVGOuterSVGFrame::GetRenderer(nsISVGRenderer**renderer)
+{
+  *renderer = mRenderer;
+  NS_IF_ADDREF(*renderer);
+  return NS_OK;
+}
+
 //----------------------------------------------------------------------
 // nsISVGSVGFrame methods:
 
@@ -530,6 +575,9 @@ nsSVGOuterSVGFrame::IsRedrawSuspended()
 NS_IMETHODIMP
 nsSVGOuterSVGFrame::SuspendRedraw()
 {
+  if (!mRenderer)
+    return NS_OK;
+
 #ifdef DEBUG
   //printf("suspend redraw (count=%d)\n", mRedrawSuspendCount);
 #endif
@@ -550,6 +598,9 @@ nsSVGOuterSVGFrame::SuspendRedraw()
 NS_IMETHODIMP
 nsSVGOuterSVGFrame::UnsuspendRedraw()
 {
+  if (!mRenderer)
+    return NS_OK;
+
 #ifdef DEBUG
 //  printf("unsuspend redraw (count=%d)\n", mRedrawSuspendCount);
 #endif
@@ -578,6 +629,9 @@ nsSVGOuterSVGFrame::UnsuspendRedraw()
 NS_IMETHODIMP
 nsSVGOuterSVGFrame::NotifyViewportChange()
 {
+  if (!mRenderer)
+    return NS_OK;
+
   // no point in doing anything when were not init'ed yet:
   if (!mViewportInitialized) return NS_OK;
 
@@ -635,6 +689,21 @@ nsSVGOuterSVGFrame::GetCanvasTM()
 
 //----------------------------------------------------------------------
 // Implementation helpers
+
+float nsSVGOuterSVGFrame::GetPxPerTwips()
+{
+  float val = GetTwipsPerPx();
+  
+  NS_ASSERTION(val!=0.0f, "invalid px/twips");  
+  if (val == 0.0) val = 1e-20f;
+  
+  return 1.0f/val;
+}
+
+float nsSVGOuterSVGFrame::GetTwipsPerPx()
+{
+  return PresContext()->ScaledPixelsToTwips();
+}
 
 void nsSVGOuterSVGFrame::InitiateReflow()
 {

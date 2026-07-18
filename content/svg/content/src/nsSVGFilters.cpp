@@ -59,7 +59,9 @@
 #include "nsIDocument.h"
 #include "nsIFrame.h"
 #include "nsSVGAnimatedInteger.h"
+#ifdef MOZ_CAIRO_GFX
 #include "gfxColor.h"
+#endif
 
 nsSVGElement::LengthInfo nsSVGFE::sLengthInfo[4] =
 {
@@ -364,9 +366,6 @@ nsSVGFilterResource::ReleaseTarget()
     return;
   }
   mInstance->DefineImage(mResult, mTargetImage, mRect, mColorModel);
-
-  // filter instance now owns the image
-  cairo_surface_destroy(mTargetImage);
   mTargetImage = nsnull;
 }
 
@@ -1210,7 +1209,8 @@ nsSVGFEColorMatrixElement::Filter(nsSVGFilterInstance *instance)
     if (num != 20)
       return NS_ERROR_FAILURE;
 
-    for(PRUint32 j = 0; j < num; j++) {
+	PRUint32 j;
+    for(j = 0; j < num; j++) {
       list->GetItem(j, getter_AddRefs(number));
       number->GetValue(&colorMatrix[j]);
     }
@@ -2850,11 +2850,11 @@ private:
 #undef RAND_Q
 #undef RAND_R
 
-  const static int sBSize = 0x100;
-  const static int sBM = 0xff;
-  const static int sPerlinN = 0x1000;
-  const static int sNP = 12;			/* 2^PerlinN */
-  const static int sNM = 0xfff;
+  enum { sBSize = 0x100 };
+  enum { sBM = 0xff };
+  enum { sPerlinN = 0x1000 };
+  enum { sNP = 12 };			/* 2^PerlinN */
+  enum { sNM = 0xfff } ;
 
   PRInt32 mLatticeSelector[sBSize + sBSize + 2];
   double mGradient[4][sBSize + sBSize + 2][2];

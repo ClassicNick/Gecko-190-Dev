@@ -36,7 +36,8 @@
  * ***** END LICENSE BLOCK ***** */
 
 /* utilities for regression tests based on frame tree comparison */
- 
+
+#include "nsCOMPtr.h"
 #include "nsIFrameUtil.h"
 #include "nsFrame.h"
 #include "nsString.h"

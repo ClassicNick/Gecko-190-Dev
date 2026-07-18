@@ -46,7 +46,8 @@ MODULE		= bookmarks
 XPIDL_MODULE	= bookmarks
 
 XPIDLSRCS	= nsIBookmarksService.idl \
-			nsIBookmarkTransactionManager.idl
-
+			nsIBookmarkTransactionManager.idl \
+			nsIDOMParser.idl \
+			
 include $(topsrcdir)/config/rules.mk
 

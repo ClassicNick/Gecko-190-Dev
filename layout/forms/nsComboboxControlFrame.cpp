@@ -520,7 +520,9 @@ nsComboboxControlFrame::AbsolutelyPositionDropDown()
   nscoord screenHeightInPixels = 0;
   if (NS_SUCCEEDED(nsFormControlFrame::GetScreenHeight(presContext, screenHeightInPixels))) {
     // Get the height of the dropdown list in pixels.
-    nscoord absoluteDropDownHeight = presContext->AppUnitsToDevPixels(dropdownSize.height);
+    float t2p;
+    t2p = presContext->TwipsToPixels();
+    nscoord absoluteDropDownHeight = NSTwipsToIntPixels(dropdownSize.height, t2p);
     // Check to see if the drop-down list will go offscreen
     if (GetScreenRect().YMost() + absoluteDropDownHeight > screenHeightInPixels) {
       // move the dropdown list up
@@ -631,7 +633,7 @@ nsComboboxControlFrame::Reflow(nsPresContext*          aPresContext,
 
   // First reflow our dropdown so that we know how tall we should be.
   ReflowDropdown(aPresContext, aReflowState);
-
+  
   // Get the width of the vertical scrollbar.  That will be the width of the
   // dropdown button.
   nsIScrollableFrame* scrollable;
@@ -1356,7 +1358,8 @@ void nsComboboxControlFrame::PaintFocus(nsIRenderingContext& aRenderingContext,
     aRenderingContext.SetLineStyle(nsLineStyle_kSolid);
   }
   //aRenderingContext.DrawRect(clipRect);
-  nscoord onePixel = nsPresContext::CSSPixelsToAppUnits(1);
+  float p2t = PresContext()->PixelsToTwips();
+  nscoord onePixel = NSIntPixelsToTwips(1, p2t);
   clipRect.width -= onePixel;
   clipRect.height -= onePixel;
   aRenderingContext.DrawLine(clipRect.x, clipRect.y, 

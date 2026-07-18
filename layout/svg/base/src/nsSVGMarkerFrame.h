@@ -38,8 +38,12 @@
 #define __NS_SVGMARKERFRAME_H__
 
 #include "nsSVGContainerFrame.h"
+#include "nsIDOMSVGAnimatedEnum.h"
+#include "nsIDOMSVGAnimatedAngle.h"
+#include "nsIDOMSVGRect.h"
+#include "nsIDOMSVGAngle.h"
 
-class gfxContext;
+class nsISVGRendererCanvas;
 class nsSVGPathGeometryFrame;
 class nsIURI;
 class nsIContent;
@@ -73,7 +77,7 @@ public:
 #endif
 
   // nsSVGMarkerFrame methods:
-  nsresult PaintMark(nsSVGRenderState *aContext,
+  nsresult PaintMark(nsISVGRendererCanvas *aCanvas,
                      nsSVGPathGeometryFrame *aMarkedFrame,
                      nsSVGMark *aMark,
                      float aStrokeWidth);
@@ -119,7 +123,9 @@ private:
   PRPackedBool mInUse2;
 };
 
-nsIContent *
-NS_GetSVGMarkerElement(nsIURI *aURI, nsIContent *aContent);
+nsresult
+NS_GetSVGMarkerFrame(nsSVGMarkerFrame **aResult,
+                     nsIURI *aURI,
+                     nsIContent *aContent);
 
 #endif

@@ -459,12 +459,12 @@ void nsTableColGroupFrame::SetContinuousBCBorderWidth(PRUint8     aForSide,
   }
 }
 
-void nsTableColGroupFrame::GetContinuousBCBorderWidth(nsMargin& aBorder)
+void nsTableColGroupFrame::GetContinuousBCBorderWidth(float     aPixelsToTwips,
+                                                      nsMargin& aBorder)
 {
-  PRInt32 aPixelsToTwips = nsPresContext::AppUnitsPerCSSPixel();
   nsTableFrame* table = nsTableFrame::GetTableFrame(this);
   nsTableColFrame* col = table->GetColFrame(mStartColIndex + mColCount - 1);
-  col->GetContinuousBCBorderWidth(aBorder);
+  col->GetContinuousBCBorderWidth(aPixelsToTwips, aBorder);
   aBorder.top = BC_BORDER_BOTTOM_HALF_COORD(aPixelsToTwips,
                                             mTopContBorderWidth);
   aBorder.bottom = BC_BORDER_TOP_HALF_COORD(aPixelsToTwips,

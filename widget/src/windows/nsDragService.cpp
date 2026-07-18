@@ -41,7 +41,25 @@
 #include <ole2.h>
 #include <oleidl.h>
 #include <shlobj.h>
+#if !defined (_MSC_VER) || _MSC_VER >= 1200
 #include <shlwapi.h>
+#else
+typedef struct _DllVersionInfo
+{
+        DWORD cbSize;
+        DWORD dwMajorVersion;                   // Major version
+        DWORD dwMinorVersion;                   // Minor version
+        DWORD dwBuildNumber;                    // Build number
+        DWORD dwPlatformID;                     // DLLVER_PLATFORM_*
+} DLLVERSIONINFO;
+
+//
+// The caller should always GetProcAddress("DllGetVersion"), not
+// implicitly link to it.
+//
+
+typedef HRESULT (CALLBACK* DLLGETVERSIONPROC)(DLLVERSIONINFO *);
+#endif
 
 // shellapi.h is needed to build with WIN32_LEAN_AND_MEAN
 #include <shellapi.h>
@@ -59,6 +77,10 @@
 #include "nsDataObjCollection.h"
 
 #include "nsAutoPtr.h"
+
+#ifndef CFSTR_PERFORMEDDROPEFFECT
+#define CFSTR_PERFORMEDDROPEFFECT TEXT("Performed DropEffect") 
+#endif
 
 #include "nsString.h"
 #include "nsEscape.h"
@@ -199,8 +221,9 @@ nsDragService::StartInvokingDragSession(IDataObject * aDataObj,
 
   // check shell32.dll version and do async drag if it is >= 5.0
   PRUint64 lShellVersion = GetShellVersion();
-  IAsyncOperation *pAsyncOp = NULL;
   PRBool isAsyncAvailable = LL_UCMP(lShellVersion, >=, LL_INIT(5, 0));
+#if !defined (_MSC_VER) || _MSC_VER >= 1200
+  IAsyncOperation *pAsyncOp = NULL;
   if (isAsyncAvailable)
   {
     // do async drag
@@ -208,6 +231,7 @@ nsDragService::StartInvokingDragSession(IDataObject * aDataObj,
                                           (void**)&pAsyncOp)))
       pAsyncOp->SetAsyncMode(TRUE);
   }
+#endif
 
   // Call the native D&D method
   HRESULT res = ::DoDragDrop(aDataObj, mNativeDragSrc, effects, &dropRes);
@@ -217,12 +241,14 @@ nsDragService::StartInvokingDragSession(IDataObject * aDataObj,
     // if dragging async
     // check for async operation
     BOOL isAsync = FALSE;
+#if !defined (_MSC_VER) || _MSC_VER >= 1200
     if (pAsyncOp)
     {
       pAsyncOp->InOperation(&isAsync);
       if (!isAsync)
         aDataObj->Release();
     }
+#endif
   }
 
   // We're done dragging
@@ -299,7 +325,7 @@ nsDragService::GetNumDropItems(PRUint32 * aNumItems)
       STGMEDIUM stm;
       if (mDataObject->GetData(&fe2, &stm) == S_OK) {
         HDROP hdrop = (HDROP)GlobalLock(stm.hGlobal);
-        *aNumItems = ::DragQueryFileW(hdrop, 0xFFFFFFFF, NULL, 0);
+        *aNumItems = ::DragQueryFile(hdrop, 0xFFFFFFFF, NULL, 0);
         ::GlobalUnlock(stm.hGlobal);
         ::ReleaseStgMedium(&stm);
       }

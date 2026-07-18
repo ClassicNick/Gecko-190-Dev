@@ -47,6 +47,8 @@
 
 typedef nsContainerFrame nsSVGForeignObjectFrameBase;
 
+class nsISVGFilterFrame;
+
 class nsSVGForeignObjectFrame : public nsSVGForeignObjectFrameBase,
                                 public nsISVGChildFrame
 {
@@ -105,7 +107,7 @@ public:
 #endif
 
   // nsISVGChildFrame interface:
-  NS_IMETHOD PaintSVG(nsSVGRenderState *aContext, nsRect *aDirtyRect);
+  NS_IMETHOD PaintSVG(nsISVGRendererCanvas* canvas, nsRect *aDirtyRect);
   NS_IMETHOD GetFrameForPointSVG(float x, float y, nsIFrame** hit);  
   NS_IMETHOD_(nsRect) GetCoveredRegion();
   NS_IMETHOD UpdateCoveredRegion();
@@ -133,6 +135,8 @@ protected:
   void DoReflow();
   void PostChildDirty();
   void UpdateGraphic();
+  float GetPxPerTwips();
+  float GetTwipsPerPx();
   // Get the bounding box relative to the outer SVG element, in user units
   void GetBBoxInternal(float* aX, float *aY, float* aWidth, float *aHeight);
   already_AddRefed<nsIDOMSVGMatrix> GetTMIncludingOffset();

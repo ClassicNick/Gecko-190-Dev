@@ -81,6 +81,9 @@ public:
   {
   }
 
+  NS_DECL_CYCLE_COLLECTION_CLASS_INHERITED_USING(nsGenericHTMLElement,
+                                                 nsGenericElement)
+
   /** Typesafe, non-refcounting cast from nsIContent.  Cheaper than QI. **/
   static nsGenericHTMLElement* FromContent(nsIContent *aContent)
   {
@@ -181,7 +184,7 @@ public:
    * @param aScrollableView the scrollable view [OUT]
    * @param aFrame (optional) the frame [OUT]
    */
-  void GetScrollInfo(nsIScrollableView **aScrollableView,
+  void GetScrollInfo(nsIScrollableView **aScrollableView, float *aP2T, float *aT2P,
                      nsIFrame **aFrame = nsnull);
 
   /**
@@ -782,6 +785,9 @@ public:
   virtual ~nsGenericHTMLFormElement();
 
   NS_IMETHOD QueryInterface(REFNSIID aIID, void** aInstancePtr);
+
+  NS_DECL_CYCLE_COLLECTION_CLASS_INHERITED_USING(nsGenericHTMLFormElement,
+                                                 nsGenericHTMLElement)
 
   virtual PRBool IsNodeOfType(PRUint32 aFlags) const;
 

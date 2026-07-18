@@ -218,7 +218,8 @@ public:
 
   nsTableCellFrame* GetNextCell() const;
 
-  virtual nsMargin* GetBorderWidth(nsMargin& aBorder) const;
+  virtual nsMargin* GetBorderWidth(float     aPixelsToTwips,
+                                   nsMargin& aBorder) const;
 
   virtual void PaintBackground(nsIRenderingContext& aRenderingContext,
                                const nsRect&        aDirtyRect,
@@ -317,7 +318,8 @@ public:
   virtual nsMargin GetUsedBorder() const;
 
   // Get the *inner half of the border only*, in twips.
-  virtual nsMargin* GetBorderWidth(nsMargin& aBorder) const;
+  virtual nsMargin* GetBorderWidth(float     aPixelsToTwips,
+                                   nsMargin& aBorder) const;
 
   // Get the *inner half of the border only*, in pixels.
   BCPixelSize GetBorderWidth(PRUint8 aSide) const;

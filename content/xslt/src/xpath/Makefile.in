@@ -48,6 +48,8 @@ LIBXUL_LIBRARY = 1
 
 REQUIRES	= string \
 		  xpcom \
+		  gfx \
+		  locale \
 		  $(NULL)
 
 ifndef MOZ_XSLT_STANDALONE

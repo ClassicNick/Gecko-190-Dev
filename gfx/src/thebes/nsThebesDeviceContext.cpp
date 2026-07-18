@@ -172,13 +172,21 @@ nsThebesDeviceContext::SetDPI()
         }
 
 #if defined(MOZ_ENABLE_GTK2)
-        float screenWidthIn = float(::gdk_screen_width_mm()) / 25.4f;
-        PRInt32 OSVal = NSToCoordRound(float(::gdk_screen_width()) / screenWidthIn);
+    float screenWidthIn = float(::gdk_screen_width_mm()) / 25.4f;
+    OSVal = NSToCoordRound(float(::gdk_screen_width()) / screenWidthIn);
 
-        if (prefDPI == 0) // Force the use of the OS dpi
-            dpi = OSVal;
-        else  // Otherwise, the minimum dpi is 96dpi
-            dpi = PR_MAX(OSVal, 96);
+    if (prefDPI == 0) // Force the use of the OS dpi
+        dpi = OSVal;
+    else  // Otherwise, the minimum dpi is 96dpi
+        dpi = PR_MAX(OSVal, 96);
+
+    if (mPrinter) {
+        // cairo printing doesn't really have the
+        // notion of DPI so we have to use 72...
+        // XXX is this an issue? we force everything else to be 96+
+        dpi = 72;
+        do_round = PR_FALSE;
+    }
 
 #elif defined(XP_WIN)
         // XXX we should really look at the widget if !dc but it is currently always null
@@ -186,7 +194,9 @@ nsThebesDeviceContext::SetDPI()
         if (!dc)
             dc = GetDC((HWND)nsnull);
 
-        PRInt32 OSVal = GetDeviceCaps(dc, LOGPIXELSY);
+    OSVal = GetDeviceCaps(dc, LOGPIXELSY);
+    if (GetDeviceCaps(dc, TECHNOLOGY) != DT_RASDISPLAY)
+        do_round = PR_FALSE;
 
         if (dc != GetPrintHDC())
             ReleaseDC((HWND)nsnull, dc);
@@ -218,12 +228,9 @@ nsThebesDeviceContext::SetDPI()
         // we probably want to actually get a real DPI here?
         dpi = 96;
 
-#else
-#error undefined platform dpi
-#endif
-
-        if (prefDPI > 0 && !mPrintingSurface)
-            dpi = prefDPI;
+    if (mPrinter) {
+        dpi = 72;
+        do_round = PR_FALSE;
     }
 
     NS_ASSERTION(dpi != -1, "no dpi set");
@@ -236,15 +243,13 @@ nsThebesDeviceContext::SetDPI()
         mAppUnitsPerDevPixel = PR_MAX(1, AppUnitsPerCSSPixel() /
                                       PR_MAX(1, (dpi + 48) / 96));
 
-    } else {
-        /* set mAppUnitsPerDevPixel so we're using exactly 72 dpi, even
-         * though that means we have a non-integer number of device "pixels"
-         * per CSS pixel
-         */
-        mAppUnitsPerDevPixel = (AppUnitsPerCSSPixel() * 96) / dpi;
-    }
+    int in2pt = 72;
 
-    mAppUnitsPerInch = NSIntPixelsToAppUnits(dpi, mAppUnitsPerDevPixel);
+    // make p2t a nice round number - this prevents rounding problems
+    mPixelsToTwips = float(NSIntPointsToTwips(in2pt)) / float(dpi);
+    if (do_round)
+        mPixelsToTwips = float(NSToIntRound(mPixelsToTwips));
+    mTwipsToPixels = 1.0f / mPixelsToTwips;
 
     return NS_OK;
 }
@@ -410,7 +415,7 @@ nsThebesDeviceContext::GetSystemFont(nsSystemFontID aID, nsFont *aFont) const
     aFont->familyNameQuirks = fontStyle.familyNameQuirks;
     aFont->weight = fontStyle.weight;
     aFont->decorations = fontStyle.decorations;
-    aFont->size = NSFloatPixelsToAppUnits(fontStyle.size, AppUnitsPerDevPixel());
+    aFont->size = NSToCoordRound(fontStyle.size * mPixelsToTwips);
     //aFont->langGroup = fontStyle.langGroup;
     aFont->sizeAdjust = fontStyle.sizeAdjust;
 
@@ -449,7 +454,7 @@ nsThebesDeviceContext::ConvertPixel(nscolor aColor, PRUint32 & aPixel)
 }
 
 NS_IMETHODIMP
-nsThebesDeviceContext::GetDeviceSurfaceDimensions(nscoord &aWidth, nscoord &aHeight)
+nsThebesDeviceContext::GetDeviceSurfaceDimensions(PRInt32 &aWidth, PRInt32 &aHeight)
 {
     if (mPrintingSurface) {
         // we have a printer device
@@ -505,22 +510,44 @@ nsThebesDeviceContext::PrepareNativeWidget(nsIWidget* aWidget, void** aOut)
 
 
 /*
- * below methods are for printing
+ * below methods are for printing and are not implemented
  */
 NS_IMETHODIMP
-nsThebesDeviceContext::InitForPrinting(nsIDeviceContextSpec *aDevice)
+nsThebesDeviceContext::GetDeviceContextFor(nsIDeviceContextSpec *aDevice,
+                                           nsIDeviceContext *&aContext)
 {
-    NS_ENSURE_ARG_POINTER(aDevice);
+    nsThebesDeviceContext *newDevCon = new nsThebesDeviceContext();
 
-    NS_ADDREF(mDeviceContextSpec = aDevice);
+    if (newDevCon) {
+        // this will ref count it
+        nsresult rv = newDevCon->QueryInterface(NS_GET_IID(nsIDeviceContext), (void**)&aContext);
+        NS_ASSERTION(NS_SUCCEEDED(rv), "This has to support nsIDeviceContext");
+    } else {
+        return NS_ERROR_OUT_OF_MEMORY;
+    }
+    
+    NS_ADDREF(aDevice);
 
-    nsresult rv = aDevice->GetSurfaceForPrinter(getter_AddRefs(mPrintingSurface));
-    if (NS_FAILED(rv))
-        return NS_ERROR_FAILURE;
+    newDevCon->mDeviceContextSpec = aDevice;
 
-    Init(nsnull);
+    newDevCon->mPrinter = PR_TRUE;
 
-    CalcPrintingSize();
+    aDevice->GetSurfaceForPrinter(getter_AddRefs(newDevCon->mPrintingSurface));
+
+    newDevCon->Init(nsnull);
+
+    float newscale = newDevCon->TwipsToDevUnits();
+    float origscale = this->TwipsToDevUnits();
+
+    newDevCon->SetCanonicalPixelScale(newscale / origscale);
+
+    float t2d = this->TwipsToDevUnits();
+    float a2d = this->AppUnitsToDevUnits();
+
+    newDevCon->SetAppUnitsToDevUnits((a2d / t2d) * newDevCon->mTwipsToPixels);
+    newDevCon->SetDevUnitsToAppUnits(1.0f / newDevCon->mAppUnitsToDevUnits);
+
+    newDevCon->CalcPrintingSize();
 
     return NS_OK;
 }
@@ -607,6 +634,28 @@ nsThebesDeviceContext::EndPage(void)
     return NS_OK;
 }
 
+
+NS_IMETHODIMP
+nsThebesDeviceContext::SetAltDevice(nsIDeviceContext* aAltDC)
+{
+    return NS_OK;
+}
+
+
+NS_IMETHODIMP
+nsThebesDeviceContext::GetAltDevice(nsIDeviceContext** aAltDC)
+{
+    *aAltDC = nsnull;
+    return NS_OK;
+}
+
+
+NS_IMETHODIMP
+nsThebesDeviceContext::SetUseAltDC(PRUint8 aValue, PRBool aOn)
+{
+    return NS_OK;
+}
+
 /** End printing methods **/
 
 void
@@ -623,10 +672,10 @@ nsThebesDeviceContext::ComputeClientRectUsingScreen(nsRect* outRect)
         screen->GetAvailRect(&x, &y, &width, &height);
         
         // convert to device units
-        outRect->y = NSIntPixelsToAppUnits(y, AppUnitsPerDevPixel());
-        outRect->x = NSIntPixelsToAppUnits(x, AppUnitsPerDevPixel());
-        outRect->width = NSIntPixelsToAppUnits(width, AppUnitsPerDevPixel());
-        outRect->height = NSIntPixelsToAppUnits(height, AppUnitsPerDevPixel());
+        outRect->y = NSToIntRound(y * mDevUnitsToAppUnits);
+        outRect->x = NSToIntRound(x * mDevUnitsToAppUnits);
+        outRect->width = NSToIntRound(width * mDevUnitsToAppUnits);
+        outRect->height = NSToIntRound(height * mDevUnitsToAppUnits);
     }
 }
 
@@ -644,10 +693,10 @@ nsThebesDeviceContext::ComputeFullAreaUsingScreen(nsRect* outRect)
         screen->GetRect ( &x, &y, &width, &height );
         
         // convert to device units
-        outRect->y = NSIntPixelsToAppUnits(y, AppUnitsPerDevPixel());
-        outRect->x = NSIntPixelsToAppUnits(x, AppUnitsPerDevPixel());
-        outRect->width = NSIntPixelsToAppUnits(width, AppUnitsPerDevPixel());
-        outRect->height = NSIntPixelsToAppUnits(height, AppUnitsPerDevPixel());
+        outRect->y = NSToIntRound(y * mDevUnitsToAppUnits);
+        outRect->x = NSToIntRound(x * mDevUnitsToAppUnits);
+        outRect->width = NSToIntRound(width * mDevUnitsToAppUnits);
+        outRect->height = NSToIntRound(height * mDevUnitsToAppUnits);
         
         mWidth = outRect->width;
         mHeight = outRect->height;
@@ -710,11 +759,9 @@ nsThebesDeviceContext::CalcPrintingSize()
     case gfxASurface::SurfaceTypeWin32:
     {
         inPoints = PR_FALSE;
-        HDC dc =  GetPrintHDC();
-        if (!dc)
-            dc = GetDC((HWND)mWidget);
-        size.width = NSIntPixelsToAppUnits(::GetDeviceCaps(dc, HORZRES), AppUnitsPerDevPixel());
-        size.height = NSIntPixelsToAppUnits(::GetDeviceCaps(dc, VERTRES), AppUnitsPerDevPixel());
+        HDC dc =  GetHDC() ? GetHDC() : GetDC((HWND)mWidget);
+        size.width = NSToIntRound(::GetDeviceCaps(dc, HORZRES) * mDevUnitsToAppUnits);
+        size.height = NSToIntRound(::GetDeviceCaps(dc, VERTRES) * mDevUnitsToAppUnits);
         mDepth = (PRUint32)::GetDeviceCaps(dc, BITSPIXEL);
         if (dc != (HDC)GetPrintHDC())
             ReleaseDC((HWND)mWidget, dc);
@@ -726,8 +773,8 @@ nsThebesDeviceContext::CalcPrintingSize()
     }
 
     if (inPoints) {
-        mWidth = NSToCoordRound(float(size.width) * AppUnitsPerInch() / 72);
-        mHeight = NSToCoordRound(float(size.height) * AppUnitsPerInch() / 72);
+        mWidth = NSFloatPointsToTwips(size.width);
+        mHeight = NSFloatPointsToTwips(size.height);
         printf("%f %f\n", size.width, size.height);
         printf("%d %d\n", (PRInt32)mWidth, (PRInt32)mHeight);
     } else {

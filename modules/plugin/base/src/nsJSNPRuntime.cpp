@@ -35,6 +35,7 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+#include "nsCOMPtr.h"
 #include "nsJSNPRuntime.h"
 #include "ns4xPlugin.h"
 #include "ns4xPluginInstance.h"

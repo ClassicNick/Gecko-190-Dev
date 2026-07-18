@@ -37,6 +37,9 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+// Helper Classes
+#include "nsCOMPtr.h"
+
 // Local Includes 
 #include "nsSHistory.h"
 

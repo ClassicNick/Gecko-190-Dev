@@ -45,6 +45,7 @@
  * ***** END LICENSE BLOCK ***** */
 
 // Local Includes
+#include "nsCOMPtr.h"
 #include "nsGlobalWindow.h"
 #include "nsScreen.h"
 #include "nsHistory.h"
@@ -726,13 +727,14 @@ NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN(nsGlobalWindow)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mArguments)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mArgumentsLast)
 
-  for (PRUint32 i = 0; i < NS_STID_ARRAY_UBOUND; ++i) {      
+  PRUint32 i;
+  for (i = 0; i < NS_STID_ARRAY_UBOUND; ++i) {      
     NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mScriptContexts[i])
   }
 
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(gGlobalStorageList)
 
-  for (PRUint32 i = 0; i < NS_STID_ARRAY_UBOUND; ++i) {      
+  for (i = 0; i < NS_STID_ARRAY_UBOUND; ++i) {      
     NS_IMPL_CYCLE_COLLECTION_TRAVERSE_NSCOMPTR(mInnerWindowHolders[i])
   }
 
@@ -764,13 +766,14 @@ NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN(nsGlobalWindow)
   NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mArguments)
   NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mArgumentsLast)
 
-  for (PRUint32 i = 0; i < NS_STID_ARRAY_UBOUND; ++i) {      
+  PRUint32 i;
+  for (i = 0; i < NS_STID_ARRAY_UBOUND; ++i) {      
     NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mScriptContexts[i])
   }
 
   NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(gGlobalStorageList)
 
-  for (PRUint32 i = 0; i < NS_STID_ARRAY_UBOUND; ++i) {      
+  for (i = 0; i < NS_STID_ARRAY_UBOUND; ++i) {      
     NS_IMPL_CYCLE_COLLECTION_UNLINK_NSCOMPTR(mInnerWindowHolders[i])
   }
 
@@ -2689,24 +2692,13 @@ nsGlobalWindow::GetInnerWidth(PRInt32* aInnerWidth)
 {
   FORWARD_TO_OUTER(GetInnerWidth, (aInnerWidth), NS_ERROR_NOT_INITIALIZED);
 
-  NS_ENSURE_STATE(mDocShell);
-
   EnsureSizeUpToDate();
 
-  *aInnerWidth = 0;
-
   nsCOMPtr<nsIBaseWindow> docShellWin(do_QueryInterface(mDocShell));
-  PRInt32 width = 0;
+  *aInnerWidth = 0;
   PRInt32 notused;
   if (docShellWin)
-    docShellWin->GetSize(&width, &notused);
-
-  nsCOMPtr<nsPresContext> presContext;
-  mDocShell->GetPresContext(getter_AddRefs(presContext));
-  NS_ENSURE_TRUE(presContext, NS_ERROR_FAILURE);
-
-  *aInnerWidth = nsPresContext::AppUnitsToIntCSSPixels(
-                                  presContext->DevPixelsToAppUnits(width));
+    docShellWin->GetSize(aInnerWidth, &notused);
 
   return NS_OK;
 }
@@ -2715,8 +2707,6 @@ NS_IMETHODIMP
 nsGlobalWindow::SetInnerWidth(PRInt32 aInnerWidth)
 {
   FORWARD_TO_OUTER(SetInnerWidth, (aInnerWidth), NS_ERROR_NOT_INITIALIZED);
-
-  NS_ENSURE_STATE(mDocShell);
 
   /*
    * If caller is not chrome and dom.disable_window_move_resize is true,
@@ -2737,19 +2727,10 @@ nsGlobalWindow::SetInnerWidth(PRInt32 aInnerWidth)
   NS_ENSURE_SUCCESS(CheckSecurityWidthAndHeight(&aInnerWidth, nsnull),
                     NS_ERROR_FAILURE);
 
-  nsCOMPtr<nsPresContext> presContext;
-  mDocShell->GetPresContext(getter_AddRefs(presContext));
-  NS_ENSURE_TRUE(presContext, NS_ERROR_FAILURE);
-
-  PRInt32 width;
-  width = presContext->AppUnitsToDevPixels(
-                         nsPresContext::CSSPixelsToAppUnits(aInnerWidth));
-
   nsCOMPtr<nsIBaseWindow> docShellAsWin(do_QueryInterface(mDocShell));
   PRInt32 notused, height = 0;
   docShellAsWin->GetSize(&notused, &height);
-
-  NS_ENSURE_SUCCESS(treeOwner->SizeShellTo(docShellAsItem, width, height),
+  NS_ENSURE_SUCCESS(treeOwner->SizeShellTo(docShellAsItem, aInnerWidth, height),
                     NS_ERROR_FAILURE);
   return NS_OK;
 }
@@ -2759,24 +2740,13 @@ nsGlobalWindow::GetInnerHeight(PRInt32* aInnerHeight)
 {
   FORWARD_TO_OUTER(GetInnerHeight, (aInnerHeight), NS_ERROR_NOT_INITIALIZED);
 
-  NS_ENSURE_STATE(mDocShell);
-
   EnsureSizeUpToDate();
 
-  *aInnerHeight = 0;
-
   nsCOMPtr<nsIBaseWindow> docShellWin(do_QueryInterface(mDocShell));
-  PRInt32 height = 0;
+  *aInnerHeight = 0;
   PRInt32 notused;
   if (docShellWin)
-    docShellWin->GetSize(&notused, &height);
-
-  nsCOMPtr<nsPresContext> presContext;
-  mDocShell->GetPresContext(getter_AddRefs(presContext));
-  NS_ENSURE_TRUE(presContext, NS_ERROR_FAILURE);
-
-  *aInnerHeight = nsPresContext::AppUnitsToIntCSSPixels(
-                                   presContext->DevPixelsToAppUnits(height));
+    docShellWin->GetSize(&notused, aInnerHeight);
 
   return NS_OK;
 }
@@ -2785,8 +2755,6 @@ NS_IMETHODIMP
 nsGlobalWindow::SetInnerHeight(PRInt32 aInnerHeight)
 {
   FORWARD_TO_OUTER(SetInnerHeight, (aInnerHeight), NS_ERROR_NOT_INITIALIZED);
-
-  NS_ENSURE_STATE(mDocShell);
 
   /*
    * If caller is not chrome and dom.disable_window_move_resize is true,
@@ -2807,19 +2775,11 @@ nsGlobalWindow::SetInnerHeight(PRInt32 aInnerHeight)
   NS_ENSURE_SUCCESS(CheckSecurityWidthAndHeight(nsnull, &aInnerHeight),
                     NS_ERROR_FAILURE);
 
-  nsCOMPtr<nsPresContext> presContext;
-  mDocShell->GetPresContext(getter_AddRefs(presContext));
-  NS_ENSURE_TRUE(presContext, NS_ERROR_FAILURE);
-
-  PRInt32 height;
-  height = presContext->AppUnitsToDevPixels(
-                          nsPresContext::CSSPixelsToAppUnits(aInnerHeight));
-
   nsCOMPtr<nsIBaseWindow> docShellAsWin(do_QueryInterface(mDocShell));
   PRInt32 width = 0, notused;
   docShellAsWin->GetSize(&width, &notused);
   NS_ENSURE_SUCCESS(treeOwner->
-                    SizeShellTo(docShellAsItem, width, height),
+                    SizeShellTo(docShellAsItem, width, aInnerHeight),
                     NS_ERROR_FAILURE);
   return NS_OK;
 }
@@ -3147,9 +3107,10 @@ nsGlobalWindow::GetScrollMaxXY(PRInt32* aScrollMaxX, PRInt32* aScrollMaxY)
 
   nsresult rv;
   nsIScrollableView *view = nsnull;      // no addref/release for views
+  float p2t, t2p;
 
   FlushPendingNotifications(Flush_Layout);
-  GetScrollInfo(&view);
+  GetScrollInfo(&view, &p2t, &t2p);
   if (!view)
     return NS_OK;      // bug 230965 changed from NS_ERROR_FAILURE
 
@@ -3161,10 +3122,10 @@ nsGlobalWindow::GetScrollMaxXY(PRInt32* aScrollMaxX, PRInt32* aScrollMaxY)
 
   if (aScrollMaxX)
     *aScrollMaxX = PR_MAX(0,
-      (PRInt32)floor(nsPresContext::AppUnitsToFloatCSSPixels(scrolledSize.width - portRect.width)));
+      (PRInt32)floor(t2p*(scrolledSize.width - portRect.width)));
   if (aScrollMaxY)
     *aScrollMaxY = PR_MAX(0,
-      (PRInt32)floor(nsPresContext::AppUnitsToFloatCSSPixels(scrolledSize.height - portRect.height)));
+      (PRInt32)floor(t2p*(scrolledSize.height - portRect.height)));
 
   return NS_OK;
 }
@@ -3194,6 +3155,7 @@ nsGlobalWindow::GetScrollXY(PRInt32* aScrollX, PRInt32* aScrollY,
 
   nsresult rv;
   nsIScrollableView *view = nsnull;      // no addref/release for views
+  float p2t, t2p;
 
   if (aDoFlush) {
     FlushPendingNotifications(Flush_Layout);
@@ -3201,7 +3163,7 @@ nsGlobalWindow::GetScrollXY(PRInt32* aScrollX, PRInt32* aScrollY,
     EnsureSizeUpToDate();
   }
   
-  GetScrollInfo(&view);
+  GetScrollInfo(&view, &p2t, &t2p);
   if (!view)
     return NS_OK;      // bug 202206 changed from NS_ERROR_FAILURE
 
@@ -3217,9 +3179,9 @@ nsGlobalWindow::GetScrollXY(PRInt32* aScrollX, PRInt32* aScrollY,
   }
   
   if (aScrollX)
-    *aScrollX = nsPresContext::AppUnitsToIntCSSPixels(xPos);
+    *aScrollX = NSTwipsToIntPixels(xPos, t2p);
   if (aScrollY)
-    *aScrollY = nsPresContext::AppUnitsToIntCSSPixels(yPos);
+    *aScrollY = NSTwipsToIntPixels(yPos, t2p);
 
   return NS_OK;
 }
@@ -4161,9 +4123,10 @@ nsGlobalWindow::ScrollTo(PRInt32 aXScroll, PRInt32 aYScroll)
 {
   nsresult result;
   nsIScrollableView *view = nsnull;      // no addref/release for views
+  float p2t, t2p;
 
   FlushPendingNotifications(Flush_Layout);
-  result = GetScrollInfo(&view);
+  result = GetScrollInfo(&view, &p2t, &t2p);
 
   if (view) {
     // Here we calculate what the max pixel value is that we can
@@ -4171,7 +4134,7 @@ nsGlobalWindow::ScrollTo(PRInt32 aXScroll, PRInt32 aYScroll)
     // twips conversion factor, and substracting 4, the 4 comes from
     // experimenting with this value, anything less makes the view
     // code not scroll correctly, I have no idea why. -- jst
-    const PRInt32 maxpx = nsPresContext::AppUnitsToIntCSSPixels(0x7fffffff) - 4;
+    const PRInt32 maxpx = (PRInt32)((float)0x7fffffff / p2t) - 4;
 
     if (aXScroll > maxpx) {
       aXScroll = maxpx;
@@ -4181,8 +4144,8 @@ nsGlobalWindow::ScrollTo(PRInt32 aXScroll, PRInt32 aYScroll)
       aYScroll = maxpx;
     }
 
-    result = view->ScrollTo(nsPresContext::CSSPixelsToAppUnits(aXScroll),
-                            nsPresContext::CSSPixelsToAppUnits(aYScroll),
+    result = view->ScrollTo(NSIntPixelsToTwips(aXScroll, p2t),
+                            NSIntPixelsToTwips(aYScroll, p2t),
                             NS_VMREFRESH_IMMEDIATE);
   }
 
@@ -4194,16 +4157,17 @@ nsGlobalWindow::ScrollBy(PRInt32 aXScrollDif, PRInt32 aYScrollDif)
 {
   nsresult result;
   nsIScrollableView *view = nsnull;      // no addref/release for views
+  float p2t, t2p;
 
   FlushPendingNotifications(Flush_Layout);
-  result = GetScrollInfo(&view);
+  result = GetScrollInfo(&view, &p2t, &t2p);
 
   if (view) {
     nscoord xPos, yPos;
     result = view->GetScrollPosition(xPos, yPos);
     if (NS_SUCCEEDED(result)) {
-      result = ScrollTo(nsPresContext::AppUnitsToIntCSSPixels(xPos) + aXScrollDif,
-                        nsPresContext::AppUnitsToIntCSSPixels(yPos) + aYScrollDif);
+      result = ScrollTo(NSTwipsToIntPixels(xPos, t2p) + aXScrollDif,
+                        NSTwipsToIntPixels(yPos, t2p) + aYScrollDif);
     }
   }
 
@@ -4215,9 +4179,10 @@ nsGlobalWindow::ScrollByLines(PRInt32 numLines)
 {
   nsresult result;
   nsIScrollableView *view = nsnull;   // no addref/release for views
+  float p2t, t2p;
 
   FlushPendingNotifications(Flush_Layout);
-  result = GetScrollInfo(&view);
+  result = GetScrollInfo(&view, &p2t, &t2p);
   if (view) {
     result = view->ScrollByLines(0, numLines);
   }
@@ -4230,9 +4195,10 @@ nsGlobalWindow::ScrollByPages(PRInt32 numPages)
 {
   nsresult result;
   nsIScrollableView *view = nsnull;   // no addref/release for views
+  float p2t, t2p;
 
   FlushPendingNotifications(Flush_Layout);
-  result = GetScrollInfo(&view);
+  result = GetScrollInfo(&view, &p2t, &t2p);
   if (view) {
     result = view->ScrollByPages(0, numPages);
   }
@@ -7231,12 +7197,15 @@ nsGlobalWindow::GetWebBrowserChrome(nsIWebBrowserChrome **aBrowserChrome)
 }
 
 nsresult
-nsGlobalWindow::GetScrollInfo(nsIScrollableView **aScrollableView)
+nsGlobalWindow::GetScrollInfo(nsIScrollableView **aScrollableView, float *aP2T,
+                              float *aT2P)
 {
-  FORWARD_TO_OUTER(GetScrollInfo, (aScrollableView),
+  FORWARD_TO_OUTER(GetScrollInfo, (aScrollableView, aP2T, aT2P),
                    NS_ERROR_NOT_INITIALIZED);
 
   *aScrollableView = nsnull;
+  *aP2T = 0.0f;
+  *aT2P = 0.0f;
 
   if (!mDocShell) {
     return NS_OK;
@@ -7245,6 +7214,9 @@ nsGlobalWindow::GetScrollInfo(nsIScrollableView **aScrollableView)
   nsCOMPtr<nsPresContext> presContext;
   mDocShell->GetPresContext(getter_AddRefs(presContext));
   if (presContext) {
+    *aP2T = presContext->PixelsToTwips();
+    *aT2P = presContext->TwipsToPixels();
+
     nsIViewManager* vm = presContext->GetViewManager();
     if (vm)
       return vm->GetRootScrollableView(aScrollableView);

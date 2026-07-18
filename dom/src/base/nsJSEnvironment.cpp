@@ -102,6 +102,7 @@
 #include "nsITimelineService.h"
 #include "nsDOMScriptObjectHolder.h"
 #include "prmem.h"
+#include "nsIFrame.h"
 
 #ifdef NS_DEBUG
 #include "jsgc.h"       // for WAY_TOO_MUCH_GC, if defined for GC debugging

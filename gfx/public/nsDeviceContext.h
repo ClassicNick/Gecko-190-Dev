@@ -100,6 +100,9 @@ public:
   NS_IMETHOD  CreateRenderingContext(nsIDrawingSurface* aSurface, nsIRenderingContext *&aContext);
   NS_IMETHOD  CreateRenderingContextInstance(nsIRenderingContext *&aContext);
 
+  NS_IMETHOD  GetCanonicalPixelScale(float &aScale) const;
+  NS_IMETHOD  SetCanonicalPixelScale(float aScale);
+
   NS_IMETHOD  GetMetricsFor(const nsFont& aFont, nsIAtom* aLangGroup,
                             nsIFontMetrics*& aMetrics);
   NS_IMETHOD  GetMetricsFor(const nsFont& aFont, nsIFontMetrics*& aMetrics);
@@ -120,6 +123,12 @@ public:
   NS_IMETHOD PrepareDocument(PRUnichar * aTitle, 
                              PRUnichar*  aPrintToFileName) { return NS_OK; }
   NS_IMETHOD AbortDocument(void) { return NS_OK; }
+
+#ifdef NS_PRINT_PREVIEW
+  NS_IMETHOD SetAltDevice(nsIDeviceContext* aAltDC);
+  NS_IMETHOD GetAltDevice(nsIDeviceContext** aAltDC) { *aAltDC = mAltDC.get(); NS_IF_ADDREF(*aAltDC); return NS_OK;}
+  NS_IMETHOD SetUseAltDC(PRUint8 aValue, PRBool aOn);
+#endif
 
   NS_IMETHOD PrepareNativeWidget(nsIWidget *aWidget, void **aOut);
   NS_IMETHOD ClearCachedSystemFonts();
@@ -143,6 +152,12 @@ protected:
   nsFontCache       *mFontCache;
   nsCOMPtr<nsIAtom> mLocaleLangGroup; // XXX temp fix for performance bug - erik
   nsHashtable*      mFontAliasTable;
+  float             mCPixelScale;
+
+#ifdef NS_PRINT_PREVIEW
+  nsCOMPtr<nsIDeviceContext> mAltDC;
+  PRUint8           mUseAltDC;
+#endif
 
 public:
   nsNativeWidget    mWidget;

@@ -38,6 +38,7 @@
 
 #include "nsSVGForeignObjectFrame.h"
 
+#include "nsISVGRendererCanvas.h"
 #include "nsISVGValue.h"
 #include "nsIDOMSVGGElement.h"
 #include "nsIDOMSVGForeignObjectElem.h"
@@ -45,6 +46,7 @@
 #include "nsIDOMSVGSVGElement.h"
 #include "nsIDOMSVGPoint.h"
 #include "nsSpaceManager.h"
+#include "nsISVGRenderer.h"
 #include "nsSVGOuterSVGFrame.h"
 #include "nsISVGValueUtils.h"
 #include "nsRegion.h"
@@ -58,8 +60,6 @@
 #include "nsINameSpaceManager.h"
 #include "nsSVGForeignObjectElement.h"
 #include "nsSVGContainerFrame.h"
-#include "gfxContext.h"
-#include "gfxMatrix.h"
 
 //----------------------------------------------------------------------
 // Implementation
@@ -235,7 +235,7 @@ TransformRect(float* aX, float *aY, float* aWidth, float *aHeight,
 }
 
 NS_IMETHODIMP
-nsSVGForeignObjectFrame::PaintSVG(nsSVGRenderState *aContext,
+nsSVGForeignObjectFrame::PaintSVG(nsISVGRendererCanvas* canvas,
                                   nsRect *aDirtyRect)
 {
   nsIFrame* kid = GetFirstChild(nsnull);
@@ -244,25 +244,20 @@ nsSVGForeignObjectFrame::PaintSVG(nsSVGRenderState *aContext,
 
   nsCOMPtr<nsIDOMSVGMatrix> tm = GetTMIncludingOffset();
 
-  gfxMatrix matrix = nsSVGUtils::ConvertSVGMatrixToThebes(tm);
-
-  nsIRenderingContext *ctx = aContext->GetRenderingContext();
-
-  if (!ctx || matrix.IsSingular()) {
+  nsCOMPtr<nsIRenderingContext> ctx;
+  canvas->LockRenderingContext(tm, getter_AddRefs(ctx));
+  
+  if (!ctx) {
     NS_WARNING("Can't render foreignObject element!");
     return NS_ERROR_FAILURE;
   }
-
-  gfxContext *gfx = aContext->GetGfxContext();
-
-  gfx->Save();
-  gfx->Multiply(matrix);
-
+    
   nsresult rv = nsLayoutUtils::PaintFrame(ctx, kid, nsRegion(kid->GetRect()),
                                           NS_RGBA(0,0,0,0));
-
-  gfx->Restore();
-
+  
+  ctx = nsnull;
+  canvas->UnlockRenderingContext();
+  
   return rv;
 }
 
@@ -279,8 +274,9 @@ nsSVGForeignObjectFrame::TransformPointFromOuterPx(float aX, float aY, nsPoint* 
     return rv;
    
   nsSVGUtils::TransformPoint(inverse, &aX, &aY);
-  *aOut = nsPoint(nsPresContext::CSSPixelsToAppUnits(aX),
-                  nsPresContext::CSSPixelsToAppUnits(aY));
+  float twipsPerPx = GetTwipsPerPx();
+  *aOut = nsPoint(NSToCoordRound(aX*twipsPerPx),
+                  NSToCoordRound(aY*twipsPerPx));
   return NS_OK;
 }
  
@@ -303,10 +299,9 @@ nsSVGForeignObjectFrame::GetFrameForPointSVG(float x, float y, nsIFrame** hit)
 nsPoint
 nsSVGForeignObjectFrame::TransformPointFromOuter(nsPoint aPt)
 {
+  float pxPerTwips = GetPxPerTwips();
   nsPoint pt(NS_UNCONSTRAINEDSIZE, NS_UNCONSTRAINEDSIZE);
-  TransformPointFromOuterPx(nsPresContext::AppUnitsToFloatCSSPixels(aPt.x),
-                            nsPresContext::AppUnitsToFloatCSSPixels(aPt.y),
-                            &pt);
+  TransformPointFromOuterPx(aPt.x*pxPerTwips, aPt.y*pxPerTwips, &pt);
   return pt;
 }
 
@@ -539,7 +534,9 @@ nsSVGForeignObjectFrame::DoReflow()
   presShell->CreateRenderingContext(this,getter_AddRefs(renderingContext));
   if (!renderingContext)
     return;
-
+  
+  float twipsPerPx = GetTwipsPerPx();
+  
   nsSVGForeignObjectElement *fO = NS_STATIC_CAST(nsSVGForeignObjectElement*,
                                                  mContent);
 
@@ -548,8 +545,8 @@ nsSVGForeignObjectFrame::DoReflow()
   float height =
     fO->mLengthAttributes[nsSVGForeignObjectElement::HEIGHT].GetAnimValue(fO);
 
-  nsSize size(nsPresContext::CSSPixelsToAppUnits(width),
-              nsPresContext::CSSPixelsToAppUnits(height));
+  nsSize size(NSFloatPixelsToTwips(width, twipsPerPx),
+              NSFloatPixelsToTwips(height, twipsPerPx));
 
   mInReflow = PR_TRUE;
 
@@ -603,7 +600,7 @@ nsSVGForeignObjectFrame::FlushDirtyRegion() {
   
   nsCOMPtr<nsIDOMSVGMatrix> tm = GetTMIncludingOffset();
   nsRect r = mDirtyRegion.GetBounds();
-  r.ScaleRoundOut(1.0f / nsPresContext::AppUnitsPerCSSPixel());
+  r.ScaleRoundOut(GetPxPerTwips());
   float x = r.x, y = r.y, w = r.width, h = r.height;
   TransformRect(&x, &y, &w, &h, tm);
   r = nsSVGUtils::ToBoundingPixelRect(x, y, x+w, y+h);
@@ -622,4 +619,19 @@ nsSVGForeignObjectFrame::InvalidateInternal(const nsRect& aDamageRect,
 
   mDirtyRegion.Or(mDirtyRegion, aDamageRect + nsPoint(aX, aY));
   FlushDirtyRegion();
+}
+
+float nsSVGForeignObjectFrame::GetPxPerTwips()
+{
+  float val = GetTwipsPerPx();
+  
+  NS_ASSERTION(val!=0.0f, "invalid px/twips");  
+  if (val == 0.0) val = 1e-20f;
+  
+  return 1.0f/val;
+}
+
+float nsSVGForeignObjectFrame::GetTwipsPerPx()
+{
+  return GetPresContext()->ScaledPixelsToTwips();
 }

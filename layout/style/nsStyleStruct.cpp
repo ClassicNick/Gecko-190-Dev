@@ -346,7 +346,7 @@ nsStyleBorder::nsStyleBorder(nsPresContext* aPresContext)
 
   mFloatEdge = NS_STYLE_FLOAT_EDGE_CONTENT;
 
-  mTwipsPerPixel = aPresContext->DevPixelsToAppUnits(1);
+  mTwipsPerPixel = NSIntPixelsToTwips(1, aPresContext->PixelsToTwips());
 }
 
 nsStyleBorder::nsStyleBorder(const nsStyleBorder& aSrc)
@@ -444,7 +444,7 @@ nsStyleOutline::nsStyleOutline(nsPresContext* aPresContext)
   mOutlineColor = NS_RGB(0, 0, 0);
 
   mHasCachedOutline = PR_FALSE;
-  mTwipsPerPixel = aPresContext->DevPixelsToAppUnits(1);
+  mTwipsPerPixel = NSIntPixelsToTwips(1, aPresContext->PixelsToTwips());
 }
 
 nsStyleOutline::nsStyleOutline(const nsStyleOutline& aSrc) {

@@ -84,6 +84,90 @@ nsDragService::~nsDragService()
 
 }
 
+<<<<<<< HEAD
+
+// Returns the rect for the drag in native view coordinates.
+//
+// Note that for text drags, this returns an incorrect rect. This bug
+// exists in the old carbon implementation too.
+static NSRect GetDragRect(nsIDOMNode* node, nsIScriptableRegion* aDragRgn)
+{
+  // Set up a default rect in case something goes wrong.
+  // It'll at least indicate that *something* is getting dragged
+  NSRect outRect = NSMakeRect(0, 0, 50, 50);
+
+  // we're going to need an nsIFrame* no matter what, so get it now
+  if (!node)
+    return outRect;
+  nsCOMPtr<nsIContent> content = do_QueryInterface(node);
+  if (!content)
+    return outRect;
+  nsIDocument* doc = content->GetCurrentDoc();
+  if (!doc)
+    return outRect;
+  nsIPresShell* presShell = doc->GetShellAt(0);
+  if (!presShell)
+    return outRect;
+  nsIFrame* frame = presShell->GetPrimaryFrameFor(content);
+  if (!frame)
+    return outRect;
+
+  if (aDragRgn) {
+    nsCOMPtr<nsIRegion> geckoRegion;
+    aDragRgn->GetRegion(getter_AddRefs(geckoRegion));
+    if (!geckoRegion)
+      return outRect;
+
+    // bounding box for the drag is in window coordinates
+    PRInt32 x, y, width, height;
+    geckoRegion->GetBoundingBox(&x, &y, &width, &height);
+    nsRect rect = nsRect(x, y, width, height);
+    // printf("drag region is x=%d, y=%d, width=%d, height=%d\n", x, y, width, height);
+
+    nsCOMPtr<nsIWidget> widget = frame->GetWindow();
+    if (!widget)
+      return outRect;
+
+    nsRect widgetScreenBounds;
+    widget->GetScreenBounds(widgetScreenBounds);
+
+    outRect.origin.x = (float)(rect.x - widgetScreenBounds.x);
+    outRect.origin.y = (float)(rect.y - widgetScreenBounds.y + rect.height);
+    outRect.size.width = (float)rect.width;
+    outRect.size.height = (float)rect.height;
+  }
+  else {
+    nsRect rect = frame->GetRect();
+
+    // find offset from our view
+    nsIView *containingView = nsnull;
+    nsPoint  viewOffset(0,0);
+    frame->GetOffsetFromView(viewOffset, &containingView);
+    if (!containingView)
+      return outRect;
+
+    // get the widget offset
+    nsPoint widgetOffset;
+    containingView->GetNearestWidget(&widgetOffset);
+
+    float t2p = frame->GetPresContext()->TwipsToPixels();
+
+    nsRect screenOffset;                                
+    screenOffset.MoveBy(NSTwipsToIntPixels(widgetOffset.x + viewOffset.x, t2p),
+                        NSTwipsToIntPixels(widgetOffset.y + viewOffset.y, t2p));
+
+    outRect.origin.x = (float)screenOffset.x;
+    outRect.origin.y = (float)screenOffset.y + (float)NSTwipsToIntPixels(rect.height, t2p);
+    outRect.size.width = (float)NSTwipsToIntPixels(rect.width, t2p);
+    outRect.size.height = (float)NSTwipsToIntPixels(rect.height, t2p);
+  }
+
+  return outRect;
+}
+
+
+=======
+>>>>>>> 56736be1f7
 static nsresult SetUpDragClipboard(nsISupportsArray* aTransferableArray)
 {
   if (!aTransferableArray)

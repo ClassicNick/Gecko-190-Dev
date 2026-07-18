@@ -72,7 +72,6 @@ public:
     NS_DECL_ISUPPORTS_INHERITED
 
     NS_IMETHOD Init(nsNativeWidget aWidget);
-    NS_IMETHOD InitForPrinting(nsIDeviceContextSpec *aDevSpec);
     NS_IMETHOD CreateRenderingContext(nsIView *aView, nsIRenderingContext *&aContext);
 
     NS_IMETHOD CreateRenderingContext(nsIDrawingSurface *aSurface, nsIRenderingContext *&aContext);
@@ -98,6 +97,9 @@ public:
     NS_IMETHOD GetClientRect(nsRect& aRect);
 
     /* printing goop */
+    NS_IMETHOD GetDeviceContextFor(nsIDeviceContextSpec *aDevice,
+                                   nsIDeviceContext *&aContext);
+
     NS_IMETHOD PrepareDocument(PRUnichar *aTitle, 
                                PRUnichar *aPrintToFileName);
 
@@ -110,6 +112,9 @@ public:
     NS_IMETHOD AbortDocument(void);
     NS_IMETHOD BeginPage(void);
     NS_IMETHOD EndPage(void);
+    NS_IMETHOD SetAltDevice(nsIDeviceContext* aAltDC);
+    NS_IMETHOD GetAltDevice(nsIDeviceContext** aAltDC);
+    NS_IMETHOD SetUseAltDC(PRUint8 aValue, PRBool aOn);
     /* end printing goop */
 
     static void DebugShowCairoSurface (const char *aName, cairo_surface_t *aSurface);

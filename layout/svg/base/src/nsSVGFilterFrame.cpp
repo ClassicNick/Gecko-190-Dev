@@ -38,18 +38,62 @@
 #include "nsIDocument.h"
 #include "nsISVGValueUtils.h"
 #include "nsSVGMatrix.h"
+#include "nsISVGRenderer.h"
+#include "nsISVGRendererCanvas.h"
 #include "nsSVGOuterSVGFrame.h"
 #include "nsISVGFilter.h"
 #include "nsGkAtoms.h"
 #include "nsIDOMSVGAnimatedInteger.h"
-#include "nsIDOMSVGAnimatedEnum.h"
 #include "nsSVGUtils.h"
 #include "nsSVGFilterElement.h"
 #include "nsSVGFilterInstance.h"
 #include "nsSVGFilters.h"
-#include "gfxASurface.h"
-#include "gfxContext.h"
-#include "gfxImageSurface.h"
+#include "nsSVGContainerFrame.h"
+
+typedef nsSVGContainerFrame nsSVGFilterFrameBase;
+
+class nsSVGFilterFrame : public nsSVGFilterFrameBase,
+                         public nsISVGFilterFrame
+{
+protected:
+  friend nsIFrame*
+  NS_NewSVGFilterFrame(nsIPresShell* aPresShell, nsIContent* aContent, nsStyleContext* aContext);
+
+  NS_IMETHOD InitSVG();
+
+public:
+  nsSVGFilterFrame(nsStyleContext* aContext) : nsSVGFilterFrameBase(aContext) {}
+
+  // nsISupports interface:
+  NS_IMETHOD QueryInterface(const nsIID& aIID, void** aInstancePtr);
+  NS_IMETHOD_(nsrefcnt) AddRef() { return NS_OK; }
+  NS_IMETHOD_(nsrefcnt) Release() { return NS_OK; }
+
+  // nsISVGFilterFrame interface:
+  NS_IMETHOD FilterPaint(nsISVGRendererCanvas *aCanvas,
+                         nsISVGChildFrame *aTarget);
+  NS_IMETHOD_(nsRect) GetInvalidationRegion(nsIFrame *aTarget);
+
+  // nsISVGValue interface:
+  NS_IMETHOD SetValueString(const nsAString &aValue) { return NS_OK; }
+  NS_IMETHOD GetValueString(nsAString& aValue) { return NS_ERROR_NOT_IMPLEMENTED; }
+
+  /**
+   * Get the "type" of the frame
+   *
+   * @see nsGkAtoms::svgFilterFrame
+   */
+  virtual nsIAtom* GetType() const;
+
+private:
+  // implementation helpers
+  void FilterFailCleanup(nsISVGRendererCanvas *aCanvas,
+                         nsISVGChildFrame *aTarget);
+};
+
+NS_INTERFACE_MAP_BEGIN(nsSVGFilterFrame)
+  NS_INTERFACE_MAP_ENTRY(nsISVGFilterFrame)
+NS_INTERFACE_MAP_END_INHERITING(nsSVGFilterFrameBase)
 
 // maximum dimension of a filter - choose so that
 // 4*(FILTER_RES_MAX^2) < UINT_MAX, it's small
@@ -64,16 +108,35 @@ NS_NewSVGFilterFrame(nsIPresShell* aPresShell, nsIContent* aContent, nsStyleCont
   return new (aPresShell) nsSVGFilterFrame(aContext);
 }
 
-nsIContent *
-NS_GetSVGFilterElement(nsIURI *aURI, nsIContent *aContent)
+nsresult
+NS_GetSVGFilterFrame(nsISVGFilterFrame **aResult,
+                     nsIURI *aURI, nsIContent *aContent)
 {
-  nsIContent* content = nsContentUtils::GetReferencedElement(aURI, aContent);
+  *aResult = nsnull;
 
-  nsCOMPtr<nsIDOMSVGFilterElement> filter = do_QueryInterface(content);
-  if (filter)
-    return content;
+  // Get the PresShell
+  nsIDocument *myDoc = aContent->GetCurrentDoc();
+  if (!myDoc) {
+    NS_WARNING("No document for this content!");
+    return NS_ERROR_FAILURE;
+  }
+  nsIPresShell *presShell = myDoc->GetShellAt(0);
+  if (!presShell) {
+    NS_WARNING("no presshell");
+    return NS_ERROR_FAILURE;
+  }
 
-  return nsnull;
+  // Find the referenced frame
+  nsIFrame *filter;
+  if (!NS_SUCCEEDED(nsSVGUtils::GetReferencedFrame(&filter, aURI, aContent, presShell)))
+    return NS_ERROR_FAILURE;
+
+  nsIAtom* frameType = filter->GetType();
+  if (frameType != nsGkAtoms::svgFilterFrame)
+    return NS_ERROR_FAILURE;
+
+  *aResult = (nsSVGFilterFrame *)filter;
+  return NS_OK;
 }
 
 NS_IMETHODIMP
@@ -90,17 +153,17 @@ nsSVGFilterFrame::InitSVG()
 }
 
 void
-nsSVGFilterFrame::FilterFailCleanup(nsSVGRenderState *aContext,
+nsSVGFilterFrame::FilterFailCleanup(nsISVGRendererCanvas *aCanvas,
                                     nsISVGChildFrame *aTarget)
 {
   aTarget->SetOverrideCTM(nsnull);
   aTarget->SetMatrixPropagation(PR_TRUE);
   aTarget->NotifyCanvasTMChanged(PR_TRUE);
-  aTarget->PaintSVG(aContext, nsnull);
+  aTarget->PaintSVG(aCanvas, nsnull);
 }
 
-nsresult
-nsSVGFilterFrame::FilterPaint(nsSVGRenderState *aContext,
+NS_IMETHODIMP
+nsSVGFilterFrame::FilterPaint(nsISVGRendererCanvas *aCanvas,
                               nsISVGChildFrame *aTarget)
 {
   nsCOMPtr<nsIDOMSVGFilterElement> aFilter = do_QueryInterface(mContent);
@@ -134,7 +197,7 @@ nsSVGFilterFrame::FilterPaint(nsSVGRenderState *aContext,
     if (unimplementedFilter)
       fprintf(stderr, "FilterFrame: unimplemented filter element\n");
 #endif
-    aTarget->PaintSVG(aContext, nsnull);
+    aTarget->PaintSVG(aCanvas, nsnull);
     return NS_OK;
   }
 
@@ -157,6 +220,11 @@ nsSVGFilterFrame::FilterPaint(nsSVGRenderState *aContext,
 
   nsSVGFilterElement *filter = NS_STATIC_CAST(nsSVGFilterElement*, mContent);
 
+  nsCOMPtr<nsIDOMSVGAnimatedEnumeration> units;
+  filter->GetFilterUnits(getter_AddRefs(units));
+  PRUint16 type;
+  units->GetAnimVal(&type);
+
   float x, y, width, height;
   nsCOMPtr<nsIDOMSVGRect> bbox;
   aTarget->GetBBox(getter_AddRefs(bbox));
@@ -167,10 +235,7 @@ nsSVGFilterFrame::FilterPaint(nsSVGRenderState *aContext,
   tmpWidth = &filter->mLengthAttributes[nsSVGFilterElement::WIDTH];
   tmpHeight = &filter->mLengthAttributes[nsSVGFilterElement::HEIGHT];
 
-  PRUint16 units;
-  filter->mFilterUnits->GetAnimVal(&units);
-
-  if (units == nsIDOMSVGFilterElement::SVG_FUNITS_OBJECTBOUNDINGBOX) {
+  if (type == nsIDOMSVGFilterElement::SVG_FUNITS_OBJECTBOUNDINGBOX) {
     if (!bbox)
       return NS_OK;
 
@@ -191,8 +256,11 @@ nsSVGFilterFrame::FilterPaint(nsSVGRenderState *aContext,
   PRInt32 filterResY = PRInt32(s2 * height + 0.5);
 
   if (mContent->HasAttr(kNameSpaceID_None, nsGkAtoms::filterRes)) {
-    filter->mFilterResX->GetAnimVal(&filterResX);
-    filter->mFilterResY->GetAnimVal(&filterResY);
+    nsCOMPtr<nsIDOMSVGAnimatedInteger> filterRes;
+    filter->GetFilterResX(getter_AddRefs(filterRes));
+    filterRes->GetAnimVal(&filterResX);
+    filter->GetFilterResY(getter_AddRefs(filterRes));
+    filterRes->GetAnimVal(&filterResY);
   }
 
   // filterRes = 0 disables rendering, < 0 is error
@@ -217,25 +285,25 @@ nsSVGFilterFrame::FilterPaint(nsSVGRenderState *aContext,
   aTarget->NotifyCanvasTMChanged(PR_TRUE);
 
   // paint the target geometry
-  nsRefPtr<gfxImageSurface> tmpSurface =
-    new gfxImageSurface(gfxIntSize(filterResX, filterResY), gfxASurface::ImageFormatARGB32);
-  if (!tmpSurface || !tmpSurface->Data()) {
-    FilterFailCleanup(aContext, aTarget);
+  cairo_surface_t *surface =
+    cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
+                               filterResX, filterResY);
+
+  if (!surface) {
+    FilterFailCleanup(aCanvas, aTarget);
     return NS_OK;
   }
 
-  gfxContext tmpContext(tmpSurface);
-  nsSVGRenderState tmpState(&tmpContext);
+  aCanvas->PushSurface(surface, PR_FALSE);
+  aTarget->PaintSVG(aCanvas, nsnull);
+  aCanvas->PopSurface();
 
-  memset(tmpSurface->Data(), 0, tmpSurface->GetSize().height * tmpSurface->Stride());
-  aTarget->PaintSVG(&tmpState, nsnull);
-
-  PRUint16 primitiveUnits;
-  filter->mPrimitiveUnits->GetAnimVal(&primitiveUnits);
+  filter->GetPrimitiveUnits(getter_AddRefs(units));
+  units->GetAnimVal(&type);
   nsSVGFilterInstance instance(target, bbox,
                                x, y, width, height,
                                filterResX, filterResY,
-                               primitiveUnits);
+                               type);
   nsSVGFilterInstance::ColorModel 
     colorModel(nsSVGFilterInstance::ColorModel::SRGB,
                nsSVGFilterInstance::ColorModel::PREMULTIPLIED);
@@ -246,15 +314,14 @@ nsSVGFilterFrame::FilterPaint(nsSVGRenderState *aContext,
                                  filterResX, filterResY);
 
     if (!alpha || cairo_surface_status(alpha)) {
-      if (alpha)
-        cairo_surface_destroy(alpha);
-      FilterFailCleanup(aContext, aTarget);
+      cairo_surface_destroy(surface);
+      FilterFailCleanup(aCanvas, aTarget);
       return NS_OK;
     }
 
-    PRUint8 *data = tmpSurface->Data();
+    PRUint8 *data = cairo_image_surface_get_data(surface);
     PRUint8 *alphaData = cairo_image_surface_get_data(alpha);
-    PRUint32 stride = tmpSurface->Stride();
+    PRUint32 stride = cairo_image_surface_get_stride(surface);
 
     for (PRUint32 yy = 0; yy < PRUint32(filterResY); yy++)
       for (PRUint32 xx = 0; xx < PRUint32(filterResX); xx++) {
@@ -271,8 +338,7 @@ nsSVGFilterFrame::FilterPaint(nsSVGRenderState *aContext,
 
   // this always needs to be defined last because the default image
   // for the first filter element is supposed to be SourceGraphic
-  instance.DefineImage(NS_LITERAL_STRING("SourceGraphic"),
-                       tmpSurface->CairoSurface(),
+  instance.DefineImage(NS_LITERAL_STRING("SourceGraphic"), surface,
                        nsRect(0, 0, filterResX, filterResY), colorModel);
 
   for (PRUint32 k=0; k<count; ++k) {
@@ -280,24 +346,16 @@ nsSVGFilterFrame::FilterPaint(nsSVGRenderState *aContext,
 
     nsCOMPtr<nsISVGFilter> filter = do_QueryInterface(child);
     if (filter && NS_FAILED(filter->Filter(&instance))) {
-      FilterFailCleanup(aContext, aTarget);
+      FilterFailCleanup(aCanvas, aTarget);
       return NS_OK;
     }
   }
 
-  cairo_surface_t *filterResult = nsnull;
+  cairo_surface_t *filterResult;
   nsRect filterRect;
-  nsRefPtr<gfxASurface> resultSurface;
 
   instance.LookupImage(NS_LITERAL_STRING(""),
                        &filterResult, &filterRect, colorModel);
-
-  if (filterResult)
-    resultSurface = gfxASurface::Wrap(filterResult);
-  if (!resultSurface) {
-    FilterFailCleanup(aContext, aTarget);
-    return NS_OK;
-  }
 
   nsCOMPtr<nsIDOMSVGMatrix> scale, fini;
   NS_NewSVGMatrix(getter_AddRefs(scale),
@@ -307,17 +365,16 @@ nsSVGFilterFrame::FilterPaint(nsSVGRenderState *aContext,
 
   ctm->Multiply(scale, getter_AddRefs(fini));
 
-  nsSVGUtils::CompositeSurfaceMatrix(aContext->GetGfxContext(),
-                                     resultSurface, fini, 1.0);
+  nsresult rv = aCanvas->CompositeSurfaceMatrix(filterResult, fini, 1.0);
 
   aTarget->SetOverrideCTM(nsnull);
   aTarget->SetMatrixPropagation(PR_TRUE);
   aTarget->NotifyCanvasTMChanged(PR_TRUE);
 
-  return NS_OK;
+  return rv;
 }
 
-nsRect
+NS_IMETHODIMP_(nsRect)
 nsSVGFilterFrame::GetInvalidationRegion(nsIFrame *aTarget)
 {
   nsSVGElement *targetContent =

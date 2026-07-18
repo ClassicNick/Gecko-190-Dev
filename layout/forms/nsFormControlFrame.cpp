@@ -80,19 +80,19 @@ nsFormControlFrame::QueryInterface(const nsIID& aIID, void** aInstancePtr)
 nscoord
 nsFormControlFrame::GetIntrinsicWidth()
 {
-  // Provide a reasonable default for sites that use an "auto" height.
-  // Note that if you change this, you should change the values in forms.css
-  // as well.  This is the 13px default width minus the 2px default border.
-  return nsPresContext::CSSPixelsToAppUnits(13 - 2 * 2);
+  // Intrinsic width is 144 twips.  Why?  I have no idea; that's what
+  // it was before I touched this code, and the original checkin
+  // comment is not so helpful.
+  return 144;
 }
 
 nscoord
 nsFormControlFrame::GetIntrinsicHeight()
 {
-  // Provide a reasonable default for sites that use an "auto" height.
-  // Note that if you change this, you should change the values in forms.css
-  // as well. This is the 13px default width minus the 2px default border.
-  return nsPresContext::CSSPixelsToAppUnits(13 - 2 * 2);
+  // Intrinsic height is 144 twips.  Why?  I have no idea; that's what
+  // it was before I touched this code, and the original checkin
+  // comment is not so helpful.
+  return 144;
 }
 
 NS_METHOD
@@ -192,7 +192,9 @@ nsFormControlFrame::GetScreenHeight(nsPresContext* aPresContext,
     context->GetRect ( screen );
   else
     context->GetClientRect(screen);
-
-  aHeight = aPresContext->AppUnitsToDevPixels(screen.height);
+      
+  float devUnits;
+  devUnits = context->DevUnitsToAppUnits();
+  aHeight = NSToIntRound(float(screen.height) / devUnits );
   return NS_OK;
 }

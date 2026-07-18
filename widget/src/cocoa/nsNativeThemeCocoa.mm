@@ -432,7 +432,7 @@ nsNativeThemeCocoa::DrawWidgetBackground(nsIRenderingContext* aContext, nsIFrame
   // setup to draw into the correct port
   nsCOMPtr<nsIDeviceContext> dctx;
   aContext->GetDeviceContext(*getter_AddRefs(dctx));
-  PRInt32 p2a = dctx->AppUnitsPerDevPixel();
+  float t2p = dctx->TwipsToDevUnits();
 
   nsRefPtr<gfxContext> thebesCtx = (gfxContext*)
     aContext->GetNativeGraphicData(nsIRenderingContext::NATIVE_THEBES_CONTEXT);
@@ -499,10 +499,10 @@ nsNativeThemeCocoa::DrawWidgetBackground(nsIRenderingContext* aContext, nsIFrame
   }
 #endif
 
-  CGRect macRect = CGRectMake(NSAppUnitsToIntPixels(aRect.x, p2a),
-                              NSAppUnitsToIntPixels(aRect.y, p2a),
-                              NSAppUnitsToIntPixels(aRect.width, p2a),
-                              NSAppUnitsToIntPixels(aRect.height, p2a));
+  CGRect macRect = CGRectMake(NSTwipsToIntPixels(aRect.x, t2p),
+                              NSTwipsToIntPixels(aRect.y, t2p),
+                              NSTwipsToIntPixels(aRect.width, t2p),
+                              NSTwipsToIntPixels(aRect.height, t2p));
   macRect.origin.x -= offsetX;
   macRect.origin.y -= offsetY;
 

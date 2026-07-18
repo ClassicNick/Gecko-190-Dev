@@ -40,6 +40,7 @@
 #define nsAboutRedirector_h__
 
 #include "nsIAboutModule.h"
+#include "nsIFrame.h"
 
 class nsAboutRedirector : public nsIAboutModule
 {

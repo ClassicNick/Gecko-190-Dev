@@ -104,8 +104,8 @@ NS_IMETHODIMP nsXULTreeitemAccessibleWrap::GetBounds(PRInt32 *x, PRInt32 *y, PRI
     PRInt32 cellStartX, cellStartY;
     mTree->GetCoordsForCellItem(mRow, mColumn, EmptyCString(), &cellStartX, &cellStartY, width, height);
     // Use entire row width, not just key column's width
-    *width = GetPresContext()->AppUnitsToDevPixels(frame->GetRect().width) -
-             cellStartX;
+    float t2p = GetPresContext()->TwipsToPixels();
+    *width = NSTwipsToIntPixels(frame->GetRect().width, t2p) - cellStartX;
   }
   return NS_OK;
 }

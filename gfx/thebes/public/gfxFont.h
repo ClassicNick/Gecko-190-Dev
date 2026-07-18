@@ -502,7 +502,7 @@ public:
         PRUint32     *mInitialBreaks;
         PRUint32      mInitialBreakCount;
         // The ratio to use to convert device pixels to application layout units
-        PRUint32      mAppUnitsPerDevUnit;
+        gfxFloat      mPixelsToUnits;
         // Flags --- see above
         PRUint32      mFlags;
     };
@@ -825,7 +825,7 @@ public:
     void *GetUserData() const { return mUserData; }
     PRUint32 GetFlags() const { return mFlags; }
     const gfxSkipChars& GetSkipChars() const { return mSkipChars; }
-    PRUint32 GetAppUnitsPerDevUnit() const { return mAppUnitsPerDevUnit; }
+    gfxFloat GetPixelsToAppUnits() { return mPixelsToAppUnits; }
 
     // The caller is responsible for initializing our glyphs after construction.
     // Initially all glyphs are such that GetCharacterGlyphs()[i].IsMissing() is true.
@@ -1113,9 +1113,7 @@ private:
 
     void        *mUserData;
     gfxSkipChars mSkipChars;
-    // This is actually an integer, but we keep it in float form to reduce
-    // the conversions required
-    PRUint32     mAppUnitsPerDevUnit;
+    gfxFloat     mPixelsToAppUnits;
     PRUint32     mFlags;
     PRUint32     mCharacterCount;
 };

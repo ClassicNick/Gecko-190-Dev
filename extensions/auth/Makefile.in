@@ -47,6 +47,8 @@ VPATH		= @srcdir@
 
 include $(DEPTH)/config/autoconf.mk
 
+ifneq ($(_MSC_VER), 1100)
+
 MODULE		= auth
 LIBRARY_NAME	= auth
 IS_COMPONENT	= 1
@@ -79,6 +81,8 @@ LOCAL_INCLUDES	+= -DUSE_SSPI
 CPPSRCS		+= nsAuthSSPI.cpp
 else
 CPPSRCS   += nsAuthSambaNTLM.cpp
+endif
+
 endif
 
 include $(topsrcdir)/config/rules.mk

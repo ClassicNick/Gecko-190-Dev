@@ -59,9 +59,7 @@
 #endif
 #include "nsPhoenixProfileMigrator.h"
 #include "nsSeamonkeyProfileMigrator.h"
-#if defined(XP_WIN) && !defined(__MINGW32__)
-#include "nsIEProfileMigrator.h"
-#elif defined(XP_MACOSX)
+#if defined(XP_MACOSX)
 #include "nsSafariProfileMigrator.h"
 #include "nsOmniWebProfileMigrator.h"
 #include "nsMacIEProfileMigrator.h"
@@ -98,9 +96,7 @@ NS_GENERIC_FACTORY_CONSTRUCTOR(nsOperaProfileMigrator)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsPhoenixProfileMigrator)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsProfileMigrator)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsSeamonkeyProfileMigrator)
-#if defined(XP_WIN) && !defined(__MINGW32__)
-NS_GENERIC_FACTORY_CONSTRUCTOR(nsIEProfileMigrator)
-#elif defined(XP_MACOSX)
+#if defined(XP_MACOSX)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsSafariProfileMigrator)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsOmniWebProfileMigrator)
 NS_GENERIC_FACTORY_CONSTRUCTOR(nsMacIEProfileMigrator)
@@ -178,13 +174,7 @@ static const nsModuleComponentInfo components[] =
     NS_PROFILEMIGRATOR_CONTRACTID,
     nsProfileMigratorConstructor },
 
-#if defined(XP_WIN) && !defined(__MINGW32__)
-  { "Internet Explorer (Windows) Profile Migrator",
-    NS_WINIEPROFILEMIGRATOR_CID,
-    NS_BROWSERPROFILEMIGRATOR_CONTRACTID_PREFIX "ie",
-    nsIEProfileMigratorConstructor },
-
-#elif defined(XP_MACOSX)
+#if defined(XP_MACOSX)
   { "Browser Shell Service",
     NS_SHELLSERVICE_CID,
     NS_SHELLSERVICE_CONTRACTID,

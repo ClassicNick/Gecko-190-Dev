@@ -39,6 +39,7 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+#include "nsCOMPtr.h"
 #include "nscore.h"
 #include "nsIContent.h"
 #include "nsINodeInfo.h"

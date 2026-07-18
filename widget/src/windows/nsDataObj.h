@@ -51,6 +51,9 @@
 #include "nsIInputStream.h"
 #include "nsIChannel.h"
 
+#define MAX_FORMATS 32
+
+#if !defined (_MSC_VER) || _MSC_VER >= 1200
 // XXX for older version of PSDK where IAsyncOperation and related stuff is not available
 // but thisdefine  should be removed when parocles config is updated
 #ifndef __IAsyncOperation_INTERFACE_DEFINED__
@@ -68,12 +71,14 @@ IAsyncOperation : public IUnknown
                                                  IBindCtx *pbcReserved,
                                                  DWORD dwEffects) = 0;
 };
+
+#endif // __IAsyncOperation_INTERFACE_DEFINED__
+#endif
+
 // this is not defined in the old headers for some reason
 #ifndef FD_PROGRESSUI
   #define FD_PROGRESSUI 0x4000
 #endif
-
-#endif // __IAsyncOperation_INTERFACE_DEFINED__
 
 /* 
  * CFSTR_SHELLURL is deprecated and doesn't have a Unicode version.
@@ -136,8 +141,10 @@ class nsITransferable;
  * can be adapted by an object derived from CfDragDrop. The CfDragDrop is
  * associated with instances via SetDragDrop().
  */
-class nsDataObj : public IDataObject,
-                  public IAsyncOperation
+class nsDataObj : public IDataObject
+#if !defined (_MSC_VER) || _MSC_VER >= 1200
+	, public IAsyncOperation
+#endif
 {
   public: // construction, destruction
     nsDataObj(nsIURI *uri = nsnull);

@@ -42,12 +42,10 @@
 #include "nsSVGGeometryFrame.h"
 #include "nsISVGGlyphFragmentLeaf.h"
 #include "nsISVGChildFrame.h"
-#include "gfxContext.h"
-#include "gfxFont.h"
 
-struct nsSVGCharacterPosition;
 class nsSVGTextFrame;
 class nsSVGGlyphFrame;
+class nsISVGCairoCanvas;
 
 typedef nsSVGGeometryFrame nsSVGGlyphFrameBase;
 
@@ -104,7 +102,7 @@ public:
 #endif
 
   // nsISVGChildFrame interface:
-  NS_IMETHOD PaintSVG(nsSVGRenderState *aContext, nsRect *aDirtyRect);
+  NS_IMETHOD PaintSVG(nsISVGRendererCanvas* canvas, nsRect *aDirtyRect);
   NS_IMETHOD GetFrameForPointSVG(float x, float y, nsIFrame** hit);
   NS_IMETHOD_(nsRect) GetCoveredRegion();
   NS_IMETHOD UpdateCoveredRegion();
@@ -153,9 +151,9 @@ public:
 
 protected:
   struct nsSVGCharacterPosition {
-    gfxPoint pos;
-    gfxFloat angle;
     PRBool draw;
+    float x, y;
+    float angle;
   };
 
   // VC6 does not allow the inner class to access protected members
@@ -163,56 +161,55 @@ protected:
   class nsSVGAutoGlyphHelperContext;
   friend class nsSVGAutoGlyphHelperContext;
 
-  // A helper class to deal with gfxTextRuns and temporary thebes
-  // contexts.  It destroys them when it goes out of scope.
+  // A helper class to deal with temporary cairo contexts.
+  // It destroys the context when it goes out of scope.
   class nsSVGAutoGlyphHelperContext
   {
   public:
-    nsSVGAutoGlyphHelperContext(nsSVGGlyphFrame *aSource,
-                                const nsString &aText)
+    nsSVGAutoGlyphHelperContext(nsSVGGlyphFrame *aSource)
     {
-      Init(aSource, aText);
+       Init(aSource);
     }
 
     nsSVGAutoGlyphHelperContext(nsSVGGlyphFrame *aSource,
-                                const nsString &aText,
+                                const nsAString &aText,
                                 nsSVGCharacterPosition **cp);
 
-    gfxContext *GetContext() { return mCT; }
-    gfxTextRun *GetTextRun() { return mTextRun; }
+    ~nsSVGAutoGlyphHelperContext()
+    {
+      cairo_destroy(mCT);
+    }
+
+    operator cairo_t * ()
+    {
+      return mCT;
+    }
 
   private:
-    void Init(nsSVGGlyphFrame *aSource, const nsString &aText);
+    void Init (nsSVGGlyphFrame *aSource);
 
-    nsRefPtr<gfxContext> mCT;
-    nsAutoPtr<gfxTextRun> mTextRun;
+    cairo_t *mCT;
   };
 
-  gfxTextRun *GetTextRun(gfxContext *aCtx,
-                         const nsString &aText);
-
+  void SelectFont(cairo_t *ctx);
   PRBool GetCharacterData(nsAString & aCharacterData);
-  nsresult GetCharacterPosition(gfxContext *aContext,
-                                const nsString &aText,
+  nsresult GetCharacterPosition(cairo_t *ctx,
+                                const nsAString &aText,
                                 nsSVGCharacterPosition **aCharacterPosition);
-
-  enum FillOrStroke { FILL, STROKE};
-
-  void LoopCharacters(gfxContext *aCtx, const nsString &aText,
-                      const nsSVGCharacterPosition *aCP,
-                      FillOrStroke aFillOrStroke);
+  static void LoopCharacters(cairo_t *aCtx,
+                             const nsAString &aText,
+                             const nsSVGCharacterPosition *aCP,
+                             void (*aFunc)(cairo_t *cr, const char *utf8));
 
   void UpdateGeometry(PRBool bRedraw, PRBool suppressInvalidation);
   void UpdateMetrics();
   PRBool ContainsPoint(float x, float y);
-  nsresult GetGlobalTransform(gfxContext *aContext);
+  nsresult GetGlobalTransform(cairo_t *ctx, nsISVGCairoCanvas *aCanvas);
   nsresult GetHighlight(PRUint32 *charnum, PRUint32 *nchars,
                         nscolor *foreground, nscolor *background);
 
-  nsRefPtr<gfxFontGroup> mFontGroup;
-  nsAutoPtr<gfxFontStyle> mFontStyle;
-  gfxPoint mPosition;
-  PRUint8 mWhitespaceHandling;
+  float mX, mY;
+  PRUint8      mWhitespaceHandling;
 };
 
 #endif

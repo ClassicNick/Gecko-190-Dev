@@ -34,15 +34,14 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-#include "nsIDOMSVGAnimatedRect.h"
-#include "nsIDOMSVGRect.h"
-#include "nsIDocument.h"
 #include "nsSVGMarkerFrame.h"
+#include "nsIDOMSVGAnimatedRect.h"
+#include "nsIDocument.h"
 #include "nsSVGPathGeometryFrame.h"
+#include "nsISVGRendererCanvas.h"
 #include "nsSVGMatrix.h"
 #include "nsSVGMarkerElement.h"
 #include "nsSVGPathGeometryElement.h"
-#include "gfxContext.h"
 
 nsIFrame*
 NS_NewSVGMarkerFrame(nsIPresShell* aPresShell, nsIContent* aContent, nsStyleContext* aContext)
@@ -50,17 +49,35 @@ NS_NewSVGMarkerFrame(nsIPresShell* aPresShell, nsIContent* aContent, nsStyleCont
   return new (aPresShell) nsSVGMarkerFrame(aContext);
 }
 
-nsIContent *
-NS_GetSVGMarkerElement(nsIURI *aURI, nsIContent *aContent)
+nsresult
+NS_GetSVGMarkerFrame(nsSVGMarkerFrame **aResult,
+                     nsIURI *aURI, nsIContent *aContent)
 {
-  nsIContent* content = nsContentUtils::GetReferencedElement(aURI, aContent);
+  *aResult = nsnull;
 
-  nsCOMPtr<nsIDOMSVGMarkerElement> marker = do_QueryInterface(content);
+  // Get the PresShell
+  nsIDocument *myDoc = aContent->GetCurrentDoc();
+  if (!myDoc) {
+    NS_WARNING("No document for this content!");
+    return NS_ERROR_FAILURE;
+  }
+  nsIPresShell *presShell = myDoc->GetShellAt(0);
+  if (!presShell) {
+    NS_WARNING("no presshell");
+    return NS_ERROR_FAILURE;
+  }
 
-  if (marker)
-    return content;
+  // Find the referenced frame
+  nsIFrame *marker;
+  if (!NS_SUCCEEDED(nsSVGUtils::GetReferencedFrame(&marker, aURI, aContent, presShell)))
+    return NS_ERROR_FAILURE;
 
-  return nsnull;
+  nsIAtom* frameType = marker->GetType();
+  if (frameType != nsGkAtoms::svgMarkerFrame)
+    return NS_ERROR_FAILURE;
+
+  *aResult = (nsSVGMarkerFrame *)marker;
+  return NS_OK;
 }
 
 NS_IMETHODIMP
@@ -132,7 +149,7 @@ nsSVGMarkerFrame::GetCanvasTM()
 
 
 nsresult
-nsSVGMarkerFrame::PaintMark(nsSVGRenderState *aContext,
+nsSVGMarkerFrame::PaintMark(nsISVGRendererCanvas *aCanvas,
                             nsSVGPathGeometryFrame *aMarkedFrame,
                             nsSVGMark *aMark, float aStrokeWidth)
 {
@@ -148,8 +165,6 @@ nsSVGMarkerFrame::PaintMark(nsSVGRenderState *aContext,
   mX = aMark->x;
   mY = aMark->y;
   mAngle = aMark->angle;
-
-  gfxContext *gfx = aContext->GetGfxContext();
 
   if (GetStyleDisplay()->IsScrollableOverflow()) {
     nsSVGMarkerElement *marker = NS_STATIC_CAST(nsSVGMarkerElement*, mContent);
@@ -171,8 +186,8 @@ nsSVGMarkerFrame::PaintMark(nsSVGRenderState *aContext,
     nsCOMPtr<nsIDOMSVGMatrix> matrix = GetCanvasTM();
     NS_ENSURE_TRUE(matrix, NS_ERROR_OUT_OF_MEMORY);
 
-    gfx->Save();
-    nsSVGUtils::SetClipRect(gfx, matrix, x, y, width, height);
+    aCanvas->PushClip();
+    aCanvas->SetClipRect(matrix, x, y, width, height);
   }
 
   for (nsIFrame* kid = mFrames.FirstChild(); kid;
@@ -181,12 +196,12 @@ nsSVGMarkerFrame::PaintMark(nsSVGRenderState *aContext,
     CallQueryInterface(kid, &SVGFrame);
     if (SVGFrame) {
       SVGFrame->NotifyCanvasTMChanged(PR_TRUE);
-      nsSVGUtils::PaintChildWithEffects(aContext, nsnull, kid);
+      nsSVGUtils::PaintChildWithEffects(aCanvas, nsnull, kid);
     }
   }
 
   if (GetStyleDisplay()->IsScrollableOverflow())
-    gfx->Restore();
+    aCanvas->PopClip();
 
   return NS_OK;
 }

@@ -470,8 +470,10 @@ nsDocShellTreeOwner::SizeShellTo(nsIDocShellTreeItem* aShellItem,
    
    nsRect shellArea = presContext->GetVisibleArea();
 
-   PRInt32 browserCX = presContext->AppUnitsToDevPixels(shellArea.width);
-   PRInt32 browserCY = presContext->AppUnitsToDevPixels(shellArea.height);
+   float pixelScale;
+   pixelScale = presContext->TwipsToPixels();
+   PRInt32 browserCX = PRInt32((float)shellArea.width*pixelScale);
+   PRInt32 browserCY = PRInt32((float)shellArea.height*pixelScale);
 
    return webBrowserChrome->SizeBrowserTo(browserCX, browserCY);
 }

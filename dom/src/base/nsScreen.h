@@ -41,6 +41,7 @@
 #include "nsISupports.h"
 #include "nsIScriptContext.h"
 #include "nsCOMPtr.h"
+#include "nsIFrame.h"
 
 class nsIDocShell;
 class nsIDeviceContext;

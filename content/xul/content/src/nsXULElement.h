@@ -594,8 +594,10 @@ protected:
     virtual nsINode::nsSlots* CreateSlots();
 
     // Required fields
+public:
     nsRefPtr<nsXULPrototypeElement>     mPrototype;
 
+protected:
     /**
      * The nearest enclosing content node with a binding
      * that created us. [Weak]
@@ -637,8 +639,10 @@ protected:
     /**
      * Return our prototype's attribute, if one exists.
      */
+public:
     nsXULPrototypeAttribute *FindPrototypeAttribute(PRInt32 aNameSpaceID,
                                                     nsIAtom *aName) const;
+protected:
     /**
      * Add a listener for the specified attribute, if appropriate.
      */

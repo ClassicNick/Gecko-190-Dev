@@ -36,6 +36,7 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+#include "nsISupportsUtils.h"
 #include "nsCOMPtr.h"
 #include "nsTitleBarFrame.h"
 #include "nsIContent.h"

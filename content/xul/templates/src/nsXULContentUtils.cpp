@@ -57,7 +57,7 @@
 
  */
 
-
+#include "nsISupportsUtils.h"
 #include "nsCOMPtr.h"
 #include "nsIContent.h"
 #include "nsINodeInfo.h"

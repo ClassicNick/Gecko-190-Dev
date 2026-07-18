@@ -36,6 +36,7 @@
  * ***** END LICENSE BLOCK ***** */
 /* $Id: nsPKCS12Blob.cpp,v 1.47 2006/05/10 17:29:56 darin%meer.net Exp $ */
 
+#include "nsCOMPtr.h"
 #include "prmem.h"
 #include "prprf.h"
 

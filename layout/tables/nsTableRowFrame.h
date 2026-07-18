@@ -220,11 +220,12 @@ public:
   nscoord GetUnpaginatedHeight(nsPresContext* aPresContext);
   void    SetUnpaginatedHeight(nsPresContext* aPresContext, nscoord aValue);
 
-  nscoord GetTopBCBorderWidth();
+  nscoord GetTopBCBorderWidth(float* aPixelsToTwips = nsnull);
   void    SetTopBCBorderWidth(BCPixelSize aWidth);
-  nscoord GetBottomBCBorderWidth();
+  nscoord GetBottomBCBorderWidth(float* aPixelsToTwips = nsnull);
   void    SetBottomBCBorderWidth(BCPixelSize aWidth);
-  nsMargin* GetBCBorderWidth(nsMargin& aBorder);
+  nsMargin* GetBCBorderWidth(float     aPixelsToTwips,
+                             nsMargin& aBorder);
                              
   /**
    * Gets inner border widths before collapsing with cell borders
@@ -232,11 +233,12 @@ public:
    * GetContinuousBCBorderWidth will not overwrite aBorder.bottom
    * see nsTablePainter about continuous borders
    */
-  void GetContinuousBCBorderWidth(nsMargin& aBorder);
+  void GetContinuousBCBorderWidth(float     aPixelsToTwips,
+                                  nsMargin& aBorder);
   /**
    * @returns outer top bc border == prev row's bottom inner
    */
-  nscoord GetOuterTopContBCBorderWidth();
+  nscoord GetOuterTopContBCBorderWidth(float aPixelsToTwips);
   /**
    * Sets full border widths before collapsing with cell borders
    * @param aForSide - side to set; only accepts right, left, and top
@@ -254,6 +256,7 @@ protected:
   void InitChildReflowState(nsPresContext&         aPresContext,
                             const nsSize&           aAvailSize,
                             PRBool                  aBorderCollapse,
+                            float                   aPixelsToTwips,
                             nsTableCellReflowState& aReflowState);
   
   /** implement abstract method on nsHTMLContainerFrame */
@@ -390,9 +393,10 @@ inline void nsTableRowFrame::SetHasUnpaginatedHeight(PRBool aValue)
   }
 }
 
-inline nscoord nsTableRowFrame::GetTopBCBorderWidth()
+inline nscoord nsTableRowFrame::GetTopBCBorderWidth(float*  aPixelsToTwips)
 {
-  return mTopBorderWidth;
+  nscoord width = (aPixelsToTwips) ? NSToCoordRound(*aPixelsToTwips * mTopBorderWidth) : mTopBorderWidth;
+  return width;
 }
 
 inline void nsTableRowFrame::SetTopBCBorderWidth(BCPixelSize aWidth)
@@ -400,9 +404,10 @@ inline void nsTableRowFrame::SetTopBCBorderWidth(BCPixelSize aWidth)
   mTopBorderWidth = aWidth;
 }
 
-inline nscoord nsTableRowFrame::GetBottomBCBorderWidth()
+inline nscoord nsTableRowFrame::GetBottomBCBorderWidth(float*  aPixelsToTwips)
 {
-  return mBottomBorderWidth;
+  nscoord width = (aPixelsToTwips) ? NSToCoordRound(*aPixelsToTwips * mBottomBorderWidth) : mBottomBorderWidth;
+  return width;
 }
 
 inline void nsTableRowFrame::SetBottomBCBorderWidth(BCPixelSize aWidth)
@@ -410,20 +415,21 @@ inline void nsTableRowFrame::SetBottomBCBorderWidth(BCPixelSize aWidth)
   mBottomBorderWidth = aWidth;
 }
 
-inline nsMargin* nsTableRowFrame::GetBCBorderWidth(nsMargin& aBorder)
+inline nsMargin* nsTableRowFrame::GetBCBorderWidth(float     aPixelsToTwips,
+                                                   nsMargin& aBorder)
 {
   aBorder.left = aBorder.right = 0;
 
-  aBorder.top    = nsPresContext::CSSPixelsToAppUnits(mTopBorderWidth);
-  aBorder.bottom = nsPresContext::CSSPixelsToAppUnits(mBottomBorderWidth);
+  aBorder.top    = NSToCoordRound(aPixelsToTwips * mTopBorderWidth);
+  aBorder.bottom = NSToCoordRound(aPixelsToTwips * mBottomBorderWidth);
 
   return &aBorder;
 }
 
 inline void
-nsTableRowFrame::GetContinuousBCBorderWidth(nsMargin& aBorder)
+nsTableRowFrame::GetContinuousBCBorderWidth(float     aPixelsToTwips,
+                                            nsMargin& aBorder)
 {
-  PRInt32 aPixelsToTwips = nsPresContext::AppUnitsPerCSSPixel();
   aBorder.right = BC_BORDER_LEFT_HALF_COORD(aPixelsToTwips,
                                             mLeftContBorderWidth);
   aBorder.top = BC_BORDER_BOTTOM_HALF_COORD(aPixelsToTwips,
@@ -432,9 +438,8 @@ nsTableRowFrame::GetContinuousBCBorderWidth(nsMargin& aBorder)
                                             mRightContBorderWidth);
 }
 
-inline nscoord nsTableRowFrame::GetOuterTopContBCBorderWidth()
+inline nscoord nsTableRowFrame::GetOuterTopContBCBorderWidth(float aPixelsToTwips)
 {
-  PRInt32 aPixelsToTwips = nsPresContext::AppUnitsPerCSSPixel();
   return BC_BORDER_TOP_HALF_COORD(aPixelsToTwips, mTopContBorderWidth);
 }
 

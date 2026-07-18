@@ -347,7 +347,7 @@ private:
    */
   nsIFrame* mFrame;
 
-  PRInt32 mAppUnitsPerInch; /* For unit conversions */
+  float mT2P; /* For unit conversions */
 };
 
 #endif /* nsComputedDOMStyle_h__ */

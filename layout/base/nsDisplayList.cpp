@@ -811,17 +811,17 @@ void nsDisplayOpacity::Paint(nsDisplayListBuilder* aBuilder,
 
   nsCOMPtr<nsIDeviceContext> devCtx;
   aCtx->GetDeviceContext(*getter_AddRefs(devCtx));
-  float a2p = 1.0f / devCtx->AppUnitsPerDevPixel();
+  float t2p = devCtx->AppUnitsToDevUnits();
 
   nsRefPtr<gfxContext> ctx = (gfxContext*)aCtx->GetNativeGraphicData(nsIRenderingContext::NATIVE_THEBES_CONTEXT);
 
   ctx->Save();
 
   ctx->NewPath();
-  ctx->Rectangle(gfxRect(bounds.x * a2p,
-                         bounds.y * a2p,
-                         bounds.width * a2p,
-                         bounds.height * a2p),
+  ctx->Rectangle(gfxRect(bounds.x * t2p,
+                         bounds.y * t2p,
+                         bounds.width * t2p,
+                         bounds.height * t2p),
                  PR_TRUE);
   ctx->Clip();
 
@@ -840,7 +840,7 @@ void nsDisplayOpacity::Paint(nsDisplayListBuilder* aBuilder,
 
 #elif !defined(XP_MACOSX)
 
-  nsIViewManager* vm = mFrame->GetPresContext()->GetViewManager();
+  nsIViewManager* vm = mFrame->PresContext()->GetViewManager();
   nsIViewManager::BlendingBuffers* buffers =
       vm->CreateBlendingBuffers(aCtx, PR_FALSE, nsnull, mNeedAlpha, bounds);
   if (!buffers) {

@@ -49,8 +49,8 @@ static BOOL PeekKeyAndIMEMessage(LPMSG msg, HWND hwnd)
 {
   MSG msg1, msg2, *lpMsg;
   BOOL b1, b2;
-  b1 = ::PeekMessageW(&msg1, NULL, WM_KEYFIRST, WM_IME_KEYLAST, PM_NOREMOVE);
-  b2 = ::PeekMessageW(&msg2, NULL, WM_IME_SETCONTEXT, WM_IME_KEYUP, PM_NOREMOVE);
+  b1 = nsToolkit::mPeekMessage(&msg1, NULL, WM_KEYFIRST, WM_IME_KEYLAST, PM_NOREMOVE);
+  b2 = nsToolkit::mPeekMessage(&msg2, NULL, WM_IME_SETCONTEXT, WM_IME_KEYUP, PM_NOREMOVE);
   if (b1 || b2) {
     if (b1 && b2) {
       if (msg1.time < msg2.time)
@@ -61,7 +61,7 @@ static BOOL PeekKeyAndIMEMessage(LPMSG msg, HWND hwnd)
       lpMsg = &msg1;
     else
       lpMsg = &msg2;
-    return ::PeekMessageW(msg, hwnd, lpMsg->message, lpMsg->message, PM_REMOVE);
+    return nsToolkit::mPeekMessage(msg, hwnd, lpMsg->message, lpMsg->message, PM_REMOVE);
   }
 
   return false;
@@ -138,14 +138,14 @@ nsAppShell::ProcessNextNativeEvent(PRBool mayWait)
     // Give priority to system messages (in particular keyboard, mouse, timer,
     // and paint messages).
     if (PeekKeyAndIMEMessage(&msg, NULL) ||
-        ::PeekMessageW(&msg, NULL, WM_MOUSEFIRST, WM_MOUSELAST, PM_REMOVE) || 
-        ::PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+        nsToolkit::mPeekMessage(&msg, NULL, WM_MOUSEFIRST, WM_MOUSELAST, PM_REMOVE) || 
+        nsToolkit::mPeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
       gotMessage = PR_TRUE;
       if (msg.message == WM_QUIT) {
         Exit();
       } else {
         ::TranslateMessage(&msg);
-        ::DispatchMessageW(&msg);
+        nsToolkit::mDispatchMessage(&msg);
       }
     } else if (mayWait) {
       // Block and wait for any posted application message

@@ -164,15 +164,15 @@ nsIdleService::CheckAwayState()
     }
 
     // Notify listeners gone idle:
-    for (PRInt32 i = 0; i < idleListeners.Count(); i++)
+    for (PRInt32 j = 0; j < idleListeners.Count(); j++)
     {
-        idleListeners[i]->Observe(this, OBSERVER_TOPIC_IDLE, timeStr.get());
+        idleListeners[j]->Observe(this, OBSERVER_TOPIC_IDLE, timeStr.get());
     }
 
     // Notify listeners that came back:
-    for (PRInt32 i = 0; i < hereListeners.Count(); i++)
+    for (PRInt32 k = 0; k < hereListeners.Count(); k++)
     {
-        hereListeners[i]->Observe(this, OBSERVER_TOPIC_BACK, timeStr.get());
+        hereListeners[k]->Observe(this, OBSERVER_TOPIC_BACK, timeStr.get());
     }
 }
 

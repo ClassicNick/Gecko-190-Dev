@@ -557,22 +557,47 @@ gfxWindowsFontGroup::MakeTextRun(const PRUnichar *aString, PRUint32 aLength,
     //    NS_ASSERTION(!(aParams->mFlags & TEXT_NEED_BOUNDING_BOX),
     //                 "Glyph extents not yet supported");
 
-    gfxTextRun *textRun = new gfxTextRun(aParams, aLength);
-    if (!textRun)
-        return nsnull;
+    NS_ASSERTION(mFlags & gfxTextRunFactory::TEXT_ABSOLUTE_SPACING,
+                 "Can't handle relative spacing");
 
-    textRun->RecordSurrogates(aString);
-    
-#ifdef FORCE_UNISCRIBE
-    const PRBool isComplex = PR_TRUE;
-#else
-    const PRBool isComplex = ScriptIsComplex(aString, aLength, SIC_COMPLEX) == S_OK ||
-                             textRun->IsRightToLeft();
-#endif
-    if (isComplex)
-        InitTextRunUniscribe(aParams->mContext, textRun, aString, aLength);
-    else
-        InitTextRunGDI(aParams->mContext, textRun, aString, aLength);
+    nsAutoTArray<PropertyProvider::Spacing,200> spacing;
+    spacing.AppendElements(mLength);
+    aProvider->GetSpacing(0, mLength, spacing.Elements());
+
+    nsTArray<gfxFloat> spaceArray;
+    PRUint32 i;
+    gfxFloat offset = 0;
+    for (i = 0; i < mLength; ++i) {
+        NS_ASSERTION(spacing.Elements()[i].mBefore == 0,
+                     "Can't handle before-spacing!");
+        gfxFloat nextOffset = offset + spacing.Elements()[i].mAfter/mPixelsToAppUnits;
+        spaceArray.AppendElement(ROUND(nextOffset) - ROUND(offset));
+        offset = nextOffset;
+    }
+    mInner.SetSpacing(spaceArray);
+}
+
+void
+gfxWrapperTextRun::Draw(gfxContext *aContext, gfxPoint aPt,
+                        PRUint32 aStart, PRUint32 aLength,
+                        const gfxRect* aDirtyRect,
+                        PropertyProvider* aBreakProvider,
+                        gfxFloat* aAdvanceWidth)
+{
+    NS_ASSERTION(aStart == 0 && aLength == mLength, "Can't handle substrings");
+    SetupSpacingFromProvider(aBreakProvider);
+    gfxPoint pt(aPt.x/mPixelsToAppUnits, aPt.y/mPixelsToAppUnits);
+    return mInner.Draw(mContext, pt);
+}
+
+gfxFloat
+gfxWrapperTextRun::GetAdvanceWidth(PRUint32 aStart, PRUint32 aLength,
+                                   PropertyProvider* aBreakProvider)
+{
+    NS_ASSERTION(aStart == 0 && aLength == mLength, "Can't handle substrings");
+    SetupSpacingFromProvider(aBreakProvider);
+    return mInner.Measure(mContext)*mPixelsToAppUnits;
+}
 
     return textRun;
 }

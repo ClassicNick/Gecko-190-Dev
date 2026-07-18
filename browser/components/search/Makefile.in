@@ -48,8 +48,13 @@ XPIDL_MODULE = browsersearch
 
 XPIDLSRCS = nsIBrowserSearchService.idl
 
-EXTRA_PP_COMPONENTS = nsSearchService.js \
-	nsSearchSuggestions.js
+EXTRA_PP_COMPONENTS = nsSearchSuggestions.js
+
+ifdef MOZ_STORAGE
+EXTRA_PP_COMPONENTS = nsSearchService.js
+else
+EXTRA_PP_COMPONENTS = nsSearchServiceObsolete.js
+endif
 
 ifneq (,$(BUILD_OFFICIAL)$(MOZILLA_OFFICIAL))
 DEFINES += -DOFFICIAL_BUILD=1

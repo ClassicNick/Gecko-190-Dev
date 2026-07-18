@@ -36,6 +36,7 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+#include "nsCOMPtr.h"
 #include "nsLayoutStatics.h"
 #include "nsContentCID.h"
 #include "nsContentHTTPStartup.h"
@@ -263,6 +264,10 @@ static void Shutdown();
 #include "nsIXMLContentBuilder.h"
 #endif
 
+#ifdef MOZ_SVG
+#include "nsISVGRenderer.h"
+#endif
+
 // Transformiix
 /* {0C351177-0159-4500-86B0-A219DFDE4258} */
 #define TRANSFORMIIX_XPATH1_SCHEME_CID \
@@ -419,6 +424,10 @@ nsresult NS_NewDOMEventGroup(nsIDOMEventGroup** aResult);
 
 NS_IMETHODIMP NS_NewXULControllers(nsISupports* aOuter, REFNSIID aIID, void** aResult);
 
+#ifdef MOZ_SVG
+nsresult NS_NewSVGRendererCairo(nsISVGRenderer** aResult);
+#endif
+
 #define MAKE_CTOR(ctor_, iface_, func_)                   \
 static NS_IMETHODIMP                                      \
 ctor_(nsISupports* aOuter, REFNSIID aIID, void** aResult) \
@@ -462,6 +471,9 @@ NS_GENERIC_FACTORY_CONSTRUCTOR(inDOMUtils)
 
 #ifndef MOZ_CAIRO_GFX
 MAKE_CTOR(CreateSelectionImageService,  nsISelectionImageService,NS_NewSelectionImageService)
+#endif
+#ifdef MOZ_SVG
+MAKE_CTOR(CreateNewSVGRendererCairo,   nsISVGRenderer,         NS_NewSVGRendererCairo)
 #endif
 MAKE_CTOR(CreateCaret,                  nsICaret,               NS_NewCaret)
 
@@ -786,6 +798,13 @@ NS_GENERIC_FACTORY_CONSTRUCTOR(nsBaseDOMException)
 
 // The list of components we register
 static const nsModuleComponentInfo gComponents[] = {
+#ifdef MOZ_SVG
+  { "SVG Cairo Renderer",
+    NS_SVG_RENDERER_CAIRO_CID,
+    NS_SVG_RENDERER_CAIRO_CONTRACTID,
+    CreateNewSVGRendererCairo },
+#endif // MOZ_SVG
+
 #ifdef DEBUG
   { "Frame utility",
     NS_FRAME_UTIL_CID,

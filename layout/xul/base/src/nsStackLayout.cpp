@@ -206,22 +206,23 @@ nsStackLayout::AddOffset(nsBoxLayoutState& aState, nsIBox* aChild, nsSize& aSize
   nsIContent* content = aChild->GetContent();
 
   if (content) {
+    nsPresContext* presContext = aState.PresContext();
     nsAutoString value;
     PRInt32 error;
 
     content->GetAttr(kNameSpaceID_None, nsGkAtoms::left, value);
     if (!value.IsEmpty()) {
       value.Trim("%");
-      offset.width =
-        nsPresContext::CSSPixelsToAppUnits(value.ToInteger(&error));
+      offset.width = NSIntPixelsToTwips(value.ToInteger(&error),
+                                        presContext->ScaledPixelsToTwips());
       offsetSpecified = PR_TRUE;
     }
 
     content->GetAttr(kNameSpaceID_None, nsGkAtoms::top, value);
     if (!value.IsEmpty()) {
       value.Trim("%");
-      offset.height =
-        nsPresContext::CSSPixelsToAppUnits(value.ToInteger(&error));
+      offset.height = NSIntPixelsToTwips(value.ToInteger(&error),
+                                         presContext->ScaledPixelsToTwips());
       offsetSpecified = PR_TRUE;
     }
   }

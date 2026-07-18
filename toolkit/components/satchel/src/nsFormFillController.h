@@ -40,6 +40,7 @@
 #ifndef __nsFormFillController__
 #define __nsFormFillController__
 
+#include "nsCOMPtr.h"
 #include "nsIFormFillController.h"
 #include "nsIAutoCompleteInput.h"
 #include "nsIAutoCompleteSearch.h"
@@ -52,7 +53,6 @@
 #include "nsIDOMMouseListener.h"
 #include "nsIDOMLoadListener.h"
 #include "nsIDOMContextMenuListener.h"
-#include "nsCOMPtr.h"
 #include "nsISupportsArray.h"
 #include "nsIDocShell.h"
 #include "nsIDOMWindow.h"

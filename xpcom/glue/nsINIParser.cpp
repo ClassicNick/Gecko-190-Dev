@@ -129,7 +129,8 @@ nsINIParser::InitFromFILE(FILE *fd)
     INIValue *last = nsnull;
 
     // outer loop tokenizes into lines
-    while (char *token = NS_strtok(kNL, &buffer)) {
+	char *token;
+    while (token = NS_strtok(kNL, &buffer)) {
         if (token[0] == '#' || token[0] == ';') // it's a comment
             continue;
 

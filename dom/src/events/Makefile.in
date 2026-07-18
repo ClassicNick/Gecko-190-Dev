@@ -56,6 +56,7 @@ REQUIRES	= xpcom \
 		  gfx \
 		  layout \
 		  pref \
+		  locale \
 		  $(NULL)
 
 CPPSRCS =				\

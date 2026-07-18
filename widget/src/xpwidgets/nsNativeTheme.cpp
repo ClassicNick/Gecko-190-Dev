@@ -173,13 +173,12 @@ nsNativeTheme::GetCheckedOrSelected(nsIFrame* aFrame, PRBool aCheckSelected)
 }
 
 static void
-ConvertMarginToAppUnits(const nsMargin &aSource, nsMargin &aDest)
+ConvertMarginToTwips(const nsMargin &aSource, nsMargin &aDest, float p2t)
 {
-  PRInt32 p2a = nsPresContext::AppUnitsPerCSSPixel();
-  aDest.top = NSIntPixelsToAppUnits(aSource.top, p2a);
-  aDest.left = NSIntPixelsToAppUnits(aSource.left, p2a);
-  aDest.bottom = NSIntPixelsToAppUnits(aSource.bottom, p2a);
-  aDest.right = NSIntPixelsToAppUnits(aSource.right, p2a);
+  aDest.top = NSIntPixelsToTwips(aSource.top, p2t);
+  aDest.left = NSIntPixelsToTwips(aSource.left, p2t);
+  aDest.bottom = NSIntPixelsToTwips(aSource.bottom, p2t);
+  aDest.right = NSIntPixelsToTwips(aSource.right, p2t);
 }
 
 PRBool
@@ -198,12 +197,15 @@ nsNativeTheme::IsWidgetStyled(nsPresContext* aPresContext, nsIFrame* aFrame,
       nsMargin defaultBorderSize;
       PRBool defaultBGTransparent = PR_FALSE;
 
+      float p2t;
+      p2t = aPresContext->PixelsToTwips();
+
       nsILookAndFeel *lookAndFeel = aPresContext->LookAndFeel();
 
       switch (aWidgetType) {
       case NS_THEME_BUTTON:
         if (IsDisabled(aFrame)) {
-          ConvertMarginToAppUnits(sButtonDisabledBorderSize, defaultBorderSize);
+          ConvertMarginToTwips(sButtonDisabledBorderSize, defaultBorderSize, p2t);
           defaultBorderStyle = sButtonInactiveBorderStyle;
           lookAndFeel->GetColor(sButtonDisabledBorderColorID,
                                 defaultBorderColor);
@@ -211,7 +213,7 @@ nsNativeTheme::IsWidgetStyled(nsPresContext* aPresContext, nsIFrame* aFrame,
                                 defaultBGColor);
         } else {
           PRInt32 contentState = GetContentState(aFrame, aWidgetType);
-          ConvertMarginToAppUnits(sButtonBorderSize, defaultBorderSize);
+          ConvertMarginToTwips(sButtonBorderSize, defaultBorderSize, p2t);
           if (contentState & NS_EVENT_STATE_HOVER &&
               contentState & NS_EVENT_STATE_ACTIVE)
             defaultBorderStyle = sButtonActiveBorderStyle;
@@ -226,7 +228,7 @@ nsNativeTheme::IsWidgetStyled(nsPresContext* aPresContext, nsIFrame* aFrame,
 
       case NS_THEME_TEXTFIELD:
         defaultBorderStyle = sTextfieldBorderStyle;
-        ConvertMarginToAppUnits(sTextfieldBorderSize, defaultBorderSize);
+        ConvertMarginToTwips(sTextfieldBorderSize, defaultBorderSize, p2t);
         lookAndFeel->GetColor(sTextfieldBorderColorID,
                               defaultBorderColor);
         if (!(defaultBGTransparent = sTextfieldBGTransparent)) {
@@ -242,7 +244,7 @@ nsNativeTheme::IsWidgetStyled(nsPresContext* aPresContext, nsIFrame* aFrame,
       case NS_THEME_LISTBOX:
       case NS_THEME_DROPDOWN:
         defaultBorderStyle = sListboxBorderStyle;
-        ConvertMarginToAppUnits(sListboxBorderSize, defaultBorderSize);
+        ConvertMarginToTwips(sListboxBorderSize, defaultBorderSize, p2t);
         lookAndFeel->GetColor(sListboxBorderColorID,
                               defaultBorderColor);
         if (!(defaultBGTransparent = sListboxBGTransparent)) {

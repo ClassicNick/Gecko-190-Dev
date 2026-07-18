@@ -111,12 +111,18 @@
 static NS_DEFINE_CID(kWidgetCID, NS_CHILD_CID);
 
 // Enumeration function that cancels all the image requests in our cache
-PR_STATIC_CALLBACK(PLDHashOperator)
-CancelImageRequest(const nsAString& aKey,
-                   nsTreeImageCacheEntry aEntry, void* aData)
+PR_STATIC_CALLBACK(PRBool)
+CancelImageRequest(nsHashKey* aKey, void* aData, void* aClosure)
 {
-  aEntry.request->Cancel(NS_BINDING_ABORTED);
-  return PL_DHASH_NEXT;
+  nsISupports* supports = NS_STATIC_CAST(nsISupports*, aData);
+  nsCOMPtr<imgIRequest> request = do_QueryInterface(supports);
+  nsCOMPtr<imgIDecoderObserver> observer;
+  request->GetDecoderObserver(getter_AddRefs(observer));
+  NS_ASSERTION(observer, "No observer?  We're leaking!");
+  request->Cancel(NS_ERROR_FAILURE);
+  imgIDecoderObserver* observer2 = observer;
+  NS_RELEASE(observer2);  // Balance out the addref from GetImage()
+  return PR_TRUE;
 }
 
 //
@@ -145,6 +151,7 @@ NS_INTERFACE_MAP_END_INHERITING(nsLeafBoxFrame)
 // Constructor
 nsTreeBodyFrame::nsTreeBodyFrame(nsIPresShell* aPresShell, nsStyleContext* aContext)
 :nsLeafBoxFrame(aPresShell, aContext),
+ mImageCache(nsnull),
  mTopRowIndex(0), 
  mHorzPosition(0),
  mHorzWidth(0),
@@ -167,7 +174,10 @@ nsTreeBodyFrame::nsTreeBodyFrame(nsIPresShell* aPresShell, nsStyleContext* aCont
 // Destructor
 nsTreeBodyFrame::~nsTreeBodyFrame()
 {
-  mImageCache.EnumerateRead(CancelImageRequest, nsnull);
+  if (mImageCache) {
+    mImageCache->Enumerate(CancelImageRequest);
+    delete mImageCache;
+  }
   delete mSlots;
 }
 
@@ -213,7 +223,6 @@ nsTreeBodyFrame::Init(nsIContent*     aContent,
   mIndentation = GetIndentation();
   mRowHeight = GetRowHeight();
 
-  NS_ENSURE_TRUE(mImageCache.Init(16), NS_ERROR_OUT_OF_MEMORY);
   return rv;
 }
 
@@ -560,14 +569,17 @@ nsTreeBodyFrame::GetColumns(nsITreeColumns** aColumns)
 NS_IMETHODIMP
 nsTreeBodyFrame::GetRowHeight(PRInt32* _retval)
 {
-  *_retval = nsPresContext::AppUnitsToIntCSSPixels(mRowHeight);
+  float t2p = PresContext()->TwipsToPixels();
+  *_retval = NSToCoordRound((float) mRowHeight * t2p);
+
   return NS_OK;
 }
 
 NS_IMETHODIMP 
 nsTreeBodyFrame::GetRowWidth(PRInt32 *aRowWidth)
 {
-  *aRowWidth = nsPresContext::AppUnitsToIntCSSPixels(CalcHorzWidth(GetScrollParts()));
+  float t2p = PresContext()->TwipsToPixels();
+  *aRowWidth = ((float)CalcHorzWidth(GetScrollParts()) * t2p);
   return NS_OK;
 }
 
@@ -588,7 +600,8 @@ nsTreeBodyFrame::GetLastVisibleRow(PRInt32 *_retval)
 NS_IMETHODIMP 
 nsTreeBodyFrame::GetHorizontalPosition(PRInt32 *aHorizontalPosition)
 {
-  *aHorizontalPosition = nsPresContext::AppUnitsToIntCSSPixels(mHorzPosition); 
+  float t2p = PresContext()->TwipsToPixels();
+  *aHorizontalPosition = ((float)mHorzPosition * t2p); 
   return NS_OK;
 }
 
@@ -804,7 +817,8 @@ nsTreeBodyFrame::ScrollParts nsTreeBodyFrame::GetScrollParts()
 void
 nsTreeBodyFrame::UpdateScrollbars(const ScrollParts& aParts)
 {
-  nscoord rowHeightAsPixels = nsPresContext::AppUnitsToIntCSSPixels(mRowHeight);
+  float t2p = PresContext()->TwipsToPixels();
+  nscoord rowHeightAsPixels = NSToCoordRound((float)mRowHeight*t2p);
 
   // Keep strong ref.
   nsCOMPtr<nsIContent> hScroll = aParts.mHScrollbarContent;
@@ -857,7 +871,8 @@ nsTreeBodyFrame::CheckOverflow(const ScrollParts& aParts)
   /* Ignore overflows that are less than half a pixel. Yes these happen
      all over the place when flex boxes are compressed real small. 
      Probably a result of a rounding errors somewhere in the layout code. */
-  bounds.width += nsPresContext::CSSPixelsToAppUnits(0.5f);
+  float p2t = presContext->PixelsToTwips();
+  bounds.width += (p2t / 2);
   
   PRBool horizontalOverflowChanged = PR_FALSE;
   if (!mHorizontalOverflow && bounds.width < mHorzWidth) {
@@ -886,15 +901,17 @@ nsTreeBodyFrame::InvalidateScrollbars(const ScrollParts& aParts)
   if (mUpdateBatchNest || !mView)
     return;
   nsWeakFrame weakFrame(this);
+  nsPresContext* presContext = PresContext();
 
   nsCOMPtr<nsIContent> vScrollbar = aParts.mVScrollbarContent;
   nsCOMPtr<nsIContent> hScrollbar = aParts.mHScrollbarContent;
   if (aParts.mVScrollbar) {
     // Do Vertical Scrollbar 
     nsAutoString maxposStr;
-
-    nscoord rowHeightAsPixels = nsPresContext::AppUnitsToIntCSSPixels(mRowHeight);
-
+  
+    float t2p = presContext->TwipsToPixels();
+    nscoord rowHeightAsPixels = NSToCoordRound((float)mRowHeight*t2p);
+  
     PRInt32 size = rowHeightAsPixels * (mRowCount > mPageLength ? mRowCount - mPageLength : 0);
     maxposStr.AppendInt(size);
     vScrollbar->SetAttr(kNameSpaceID_None, nsGkAtoms::maxpos, maxposStr, PR_TRUE);
@@ -923,7 +940,7 @@ nsTreeBodyFrame::InvalidateScrollbars(const ScrollParts& aParts)
     ENSURE_TRUE(weakFrame.IsAlive());
   
     pageStr.Truncate();
-    pageStr.AppendInt(nsPresContext::CSSPixelsToAppUnits(16));
+    pageStr.AppendInt(NSIntPixelsToTwips(16, presContext->PixelsToTwips()));
     hScrollbar->SetAttr(kNameSpaceID_None, nsGkAtoms::increment, pageStr, PR_TRUE);
   }
 }
@@ -937,8 +954,11 @@ nsTreeBodyFrame::AdjustClientCoordsToBoxCoordSpace(PRInt32 aX, PRInt32 aY,
 {
   nsPresContext* presContext = PresContext();
 
-  nsPoint point(nsPresContext::CSSPixelsToAppUnits(aX),
-                nsPresContext::CSSPixelsToAppUnits(aY));
+  // Convert our x and y coords to twips.
+  // XXXbz should this use IntScaledPixelsToTwips?
+  float pixelsToTwips = presContext->PixelsToTwips();
+  nsPoint point(NSToIntRound(aX * pixelsToTwips),
+                NSToIntRound(aY * pixelsToTwips));
 
   // Now get our client offset, in twips, and subtract if from the
   // point to get it in our coordinates
@@ -1217,12 +1237,14 @@ nsTreeBodyFrame::GetCoordsForCellItem(PRInt32 aRow, nsITreeColumn* aCol, const n
 
     theRect = textRect;
   }
-
-  *aX = nsPresContext::AppUnitsToIntCSSPixels(theRect.x);
-  *aY = nsPresContext::AppUnitsToIntCSSPixels(theRect.y);
-  *aWidth = nsPresContext::AppUnitsToIntCSSPixels(theRect.width);
-  *aHeight = nsPresContext::AppUnitsToIntCSSPixels(theRect.height);
-
+  
+  float t2p = presContext->TwipsToPixels();
+  
+  *aX = NSToIntRound(theRect.x * t2p);
+  *aY = NSToIntRound(theRect.y * t2p);
+  *aWidth = NSToIntRound(theRect.width * t2p);
+  *aHeight = NSToIntRound(theRect.height * t2p);
+ 
   return NS_OK;
 }
 
@@ -2024,8 +2046,9 @@ nsTreeBodyFrame::GetTwistyRect(PRInt32 aRowIndex,
                                 &minTwistySize, &canOverride);
 
     // GMWS() returns size in pixels, we need to convert it back to twips
-    minTwistySize.width = aPresContext->DevPixelsToAppUnits(minTwistySize.width);
-    minTwistySize.height = aPresContext->DevPixelsToAppUnits(minTwistySize.height);
+    float p2t = aPresContext->ScaledPixelsToTwips();
+    minTwistySize.width = NSIntPixelsToTwips(minTwistySize.width, p2t);
+    minTwistySize.height = NSIntPixelsToTwips(minTwistySize.height, p2t);
 
     if (aTwistyRect.width < minTwistySize.width || !canOverride)
       aTwistyRect.width = minTwistySize.width;
@@ -2058,27 +2081,29 @@ nsTreeBodyFrame::GetImage(PRInt32 aRowIndex, nsTreeColumn* aCol, PRBool aUseCont
     uri->GetSpec(spec);
     CopyUTF8toUTF16(spec, imageSrc);
   }
+  nsStringKey key(imageSrc);
 
-  // Look the image up in our cache.
-  nsTreeImageCacheEntry entry;
-  if (mImageCache.Get(imageSrc, &entry)) {
-    // Find out if the image has loaded.
-    PRUint32 status;
-    imgIRequest *imgReq = entry.request;
-    imgReq->GetImageStatus(&status);
-    imgReq->GetImage(aResult); // We hand back the image here.  The GetImage call addrefs *aResult.
-    PRUint32 numFrames = 1;
-    if (*aResult)
-      (*aResult)->GetNumFrames(&numFrames);
+  if (mImageCache) {
+    // Look the image up in our cache.
+    nsCOMPtr<imgIRequest> imgReq = getter_AddRefs(NS_STATIC_CAST(imgIRequest*, mImageCache->Get(&key)));
+    if (imgReq) {
+      // Find out if the image has loaded.
+      PRUint32 status;
+      imgReq->GetImageStatus(&status);
+      imgReq->GetImage(aResult); // We hand back the image here.  The GetImage call addrefs *aResult.
+      PRUint32 numFrames = 1;
+      if (*aResult)
+        (*aResult)->GetNumFrames(&numFrames);
 
-    if ((!(status & imgIRequest::STATUS_LOAD_COMPLETE)) || numFrames > 1) {
-      // We either aren't done loading, or we're animating. Add our row as a listener for invalidations.
-      nsCOMPtr<imgIDecoderObserver> obs;
-      imgReq->GetDecoderObserver(getter_AddRefs(obs));
-      nsCOMPtr<nsITreeImageListener> listener(do_QueryInterface(obs));
-      if (listener)
-        listener->AddCell(aRowIndex, aCol);
-      return NS_OK;
+      if ((!(status & imgIRequest::STATUS_LOAD_COMPLETE)) || numFrames > 1) {
+        // We either aren't done loading, or we're animating. Add our row as a listener for invalidations.
+        nsCOMPtr<imgIDecoderObserver> obs;
+        imgReq->GetDecoderObserver(getter_AddRefs(obs));
+        nsCOMPtr<nsITreeImageListener> listener(do_QueryInterface(obs));
+        if (listener)
+          listener->AddCell(aRowIndex, aCol);
+        return NS_OK;
+      }
     }
   }
 
@@ -2129,8 +2154,15 @@ nsTreeBodyFrame::GetImage(PRInt32 aRowIndex, nsTreeColumn* aCol, PRBool aUseCont
 
     // In a case it was already cached.
     imageRequest->GetImage(aResult);
-    nsTreeImageCacheEntry cacheEntry(imageRequest, imgDecoderObserver);
-    mImageCache.Put(imageSrc, cacheEntry);
+
+    if (!mImageCache) {
+      mImageCache = new nsSupportsHashtable(16);
+      if (!mImageCache)
+        return NS_ERROR_OUT_OF_MEMORY;
+    }
+    mImageCache->Put(&key, imageRequest);
+    imgIDecoderObserver* decoderObserverPtr = imgDecoderObserver;
+    NS_ADDREF(decoderObserverPtr);  // Will get released when we remove the cache entry.
   }
   return NS_OK;
 }
@@ -2189,18 +2221,19 @@ nsRect nsTreeBodyFrame::GetImageSize(PRInt32 aRowIndex, nsTreeColumn* aCol, PRBo
   if (image) {
     if (needWidth || needHeight) {
       // Get the natural image size.
+      float p2t = PresContext()->PixelsToTwips();
 
       if (needWidth) {
         // Get the size from the image.
         nscoord width;
         image->GetWidth(&width);
-        r.width += nsPresContext::CSSPixelsToAppUnits(width); 
+        r.width += NSIntPixelsToTwips(width, p2t); 
       }
     
       if (needHeight) {
         nscoord height;
         image->GetHeight(&height);
-        r.height += nsPresContext::CSSPixelsToAppUnits(height); 
+        r.height += NSIntPixelsToTwips(height, p2t); 
       }
     }
   }
@@ -2257,6 +2290,7 @@ nsTreeBodyFrame::GetImageDestSize(nsStyleContext* aStyleContext,
     nsSize imageSize(0,0);
 
     const nsStyleList* myList = aStyleContext->GetStyleList();
+    float p2t = PresContext()->PixelsToTwips();
 
     if (useImageRegion && myList->mImageRegion.width > 0) {
       // CSS has specified an image region.
@@ -2266,7 +2300,7 @@ nsTreeBodyFrame::GetImageDestSize(nsStyleContext* aStyleContext,
     else if (image) {
       nscoord width;
       image->GetWidth(&width);
-      imageSize.width = nsPresContext::CSSPixelsToAppUnits(width);
+      imageSize.width = NSIntPixelsToTwips(width, p2t);
     }
 
     if (useImageRegion && myList->mImageRegion.height > 0) {
@@ -2277,7 +2311,7 @@ nsTreeBodyFrame::GetImageDestSize(nsStyleContext* aStyleContext,
     else if (image) {
       nscoord height;
       image->GetHeight(&height);
-      imageSize.height = nsPresContext::CSSPixelsToAppUnits(height);
+      imageSize.height = NSIntPixelsToTwips(height, p2t);
     }
 
     if (needWidth) {
@@ -2331,11 +2365,12 @@ nsTreeBodyFrame::GetImageSourceRect(nsStyleContext* aStyleContext,
   }
   else if (image) {
     // Use the actual image size.
+    float p2t = PresContext()->PixelsToTwips();
     nscoord coord;
     image->GetWidth(&coord);
-    r.width = nsPresContext::CSSPixelsToAppUnits(coord);
+    r.width = NSIntPixelsToTwips(coord, p2t);
     image->GetHeight(&coord);
-    r.height = nsPresContext::CSSPixelsToAppUnits(coord);
+    r.height = NSIntPixelsToTwips(coord, p2t);
   }
 
   return r;
@@ -2362,9 +2397,12 @@ PRInt32 nsTreeBodyFrame::GetRowHeight()
       height = minHeight;
 
     if (height > 0) {
-      height = nsPresContext::AppUnitsToIntCSSPixels(height);
+      nsPresContext* presContext = PresContext();
+      float t2p = presContext->TwipsToPixels();
+      height = NSTwipsToIntPixels(height, t2p);
       height += height % 2;
-      height = nsPresContext::CSSPixelsToAppUnits(height);
+      float p2t = presContext->PixelsToTwips();
+      height = NSIntPixelsToTwips(height, p2t);
 
       // XXX Check box-sizing to determine if border/padding should augment the height
       // Inflate the height by our margins.
@@ -2377,7 +2415,8 @@ PRInt32 nsTreeBodyFrame::GetRowHeight()
     }
   }
 
-  return nsPresContext::CSSPixelsToAppUnits(18); // As good a default as any.
+  float p2t = PresContext()->PixelsToTwips();
+  return NSIntPixelsToTwips(18, p2t); // As good a default as any.
 }
 
 PRInt32 nsTreeBodyFrame::GetIndentation()
@@ -2392,8 +2431,8 @@ PRInt32 nsTreeBodyFrame::GetIndentation()
       return val;
     }
   }
-
-  return nsPresContext::CSSPixelsToAppUnits(16); // As good a default as any.
+  float p2t = PresContext()->PixelsToTwips();
+  return NSIntPixelsToTwips(16, p2t); // As good a default as any.
 }
 
 void nsTreeBodyFrame::CalcInnerBox()
@@ -2956,7 +2995,8 @@ nsTreeBodyFrame::PaintSeparator(PRInt32              aRowIndex,
       height = stylePosition->mHeight.GetCoordValue();
     else {
       // Use default height 2px.
-      height = nsPresContext::CSSPixelsToAppUnits(2);
+      float p2t = PresContext()->PixelsToTwips();
+      height = NSIntPixelsToTwips(2, p2t);
     }
 
     // Obtain the margins for the separator and then deflate our rect by that 
@@ -3218,8 +3258,7 @@ nsTreeBodyFrame::PaintTwisty(PRInt32              aRowIndex,
         }
           
         // Paint the image.
-        nsLayoutUtils::DrawImage(&aRenderingContext, image,
-                                 r, aDirtyRect, &imageSize);
+        aRenderingContext.DrawImage(image, imageSize, r);
       }
     }        
   }
@@ -3340,11 +3379,15 @@ nsTreeBodyFrame::PaintImage(PRInt32              aRowIndex,
     // Essentially, we are scaling the image as dictated by the CSS destination
     // height and width, and we are then clipping the scaled image by the cell
     // width and height.
-    nsRect clip;
-    clip.IntersectRect(aDirtyRect, destRect);
-    nsLayoutUtils::DrawImage(&aRenderingContext, image,
-                             nsRect(destRect.TopLeft(), imageDestSize),
-                             clip, &sourceRect);
+    if (destRect.width != imageDestSize.width) {
+      sourceRect.width = sourceRect.width * destRect.width / imageDestSize.width;
+    }
+    if (destRect.height != imageDestSize.height) {
+      sourceRect.height = sourceRect.height * destRect.height / imageDestSize.height;
+    }
+
+    // Finally we can paint the image.
+    aRenderingContext.DrawImage(image, sourceRect, destRect);
   }
 
   // Update the aRemainingWidth and aCurrX values.
@@ -3503,8 +3546,7 @@ nsTreeBodyFrame::PaintCheckbox(PRInt32              aRowIndex,
     }
 
     // Paint the image.
-    nsLayoutUtils::DrawImage(&aRenderingContext, image,
-                             r, aDirtyRect, &imageSize);
+    aRenderingContext.DrawImage(image, imageSize, r);
   }
 }
 
@@ -3642,6 +3684,7 @@ nsTreeBodyFrame::PaintDropFeedback(const nsRect&        aDropFeedbackRect,
     }
 
     const nsStylePosition* stylePosition = feedbackContext->GetStylePosition();
+	nsPresContext* presContext = PresContext();
 
     // Obtain the width for the drop feedback or use default value.
     nscoord width;
@@ -3649,7 +3692,8 @@ nsTreeBodyFrame::PaintDropFeedback(const nsRect&        aDropFeedbackRect,
       width = stylePosition->mWidth.GetCoordValue();
     else {
       // Use default width 50px.
-      width = nsPresContext::CSSPixelsToAppUnits(50);
+      float p2t = presContext->PixelsToTwips();
+      width = NSIntPixelsToTwips(50, p2t);
     }
 
     // Obtain the height for the drop feedback or use default value.
@@ -3658,7 +3702,8 @@ nsTreeBodyFrame::PaintDropFeedback(const nsRect&        aDropFeedbackRect,
       height = stylePosition->mHeight.GetCoordValue();
     else {
       // Use default height 2px.
-      height = nsPresContext::CSSPixelsToAppUnits(2);
+      float p2t = presContext->PixelsToTwips();
+      height = NSIntPixelsToTwips(2, p2t);
     }
 
     // Obtain the margins for the drop feedback and then deflate our rect
@@ -3792,8 +3837,8 @@ nsresult nsTreeBodyFrame::ScrollToColumnInternal(const ScrollParts& aParts,
 
 NS_IMETHODIMP nsTreeBodyFrame::ScrollToHorizontalPosition(PRInt32 aHorizontalPosition)
 {
-  ScrollHorzInternal(GetScrollParts(),
-                     nsPresContext::CSSPixelsToAppUnits(aHorizontalPosition));
+  float p2t = PresContext()->PixelsToTwips();
+  ScrollHorzInternal(GetScrollParts(), (float)aHorizontalPosition * p2t);
   return NS_OK;
 }
 
@@ -3889,7 +3934,8 @@ nsTreeBodyFrame::ScrollInternal(const ScrollParts& aParts, PRInt32 aRow)
   } else {
     nsIWidget* widget = nsLeafBoxFrame::GetView()->GetWidget();
     if (widget) {
-      nscoord rowHeightAsPixels = presContext->AppUnitsToDevPixels(mRowHeight);
+      float t2p = presContext->TwipsToPixels();
+      nscoord rowHeightAsPixels = NSToCoordRound((float)mRowHeight*t2p);
       widget->Scroll(0, -delta*rowHeightAsPixels, nsnull);
     }
   }
@@ -3924,6 +3970,9 @@ nsTreeBodyFrame::ScrollHorzInternal(const ScrollParts& aParts, PRInt32 aPosition
   PRInt32 delta = aPosition - mHorzPosition;
   mHorzPosition = aPosition;
 
+  nsRefPtr<nsPresContext> presContext = PresContext();
+  float t2p = presContext->TwipsToPixels();
+
   // See if we have a background image.  If we do, then we cannot blit.
   const nsStyleBackground* background = GetStyleBackground();
   if (background->mBackgroundImage || background->IsTransparent() || 
@@ -3932,7 +3981,7 @@ nsTreeBodyFrame::ScrollHorzInternal(const ScrollParts& aParts, PRInt32 aPosition
   } else {
     nsIWidget* widget = nsLeafBoxFrame::GetView()->GetWidget();
     if (widget) {
-      widget->Scroll(PresContext()->AppUnitsToDevPixels(-delta), 0, nsnull);
+      widget->Scroll(NSToCoordRound((float)(-delta) * t2p), 0, nsnull);
     }
   }
 
@@ -3953,8 +4002,7 @@ nsTreeBodyFrame::ScrollHorzInternal(const ScrollParts& aParts, PRInt32 aPosition
   event.flags |= NS_EVENT_FLAG_CANT_BUBBLE;
 
   nsEventStatus status = nsEventStatus_eIgnore;
-  nsEventDispatcher::Dispatch(mContent, PresContext(), &event, nsnull,
-                              &status);
+  nsEventDispatcher::Dispatch(mContent, presContext, &event, nsnull, &status);
 
   return NS_OK;
 }
@@ -4000,7 +4048,9 @@ nsTreeBodyFrame::PositionChanged(nsISupports* aScrollbar, PRInt32 aOldIndex, PRI
 
   // Vertical Scrollbar 
   if (parts.mVScrollbar == sf) {
-    nscoord rh = nsPresContext::AppUnitsToIntCSSPixels(mRowHeight);
+
+    float t2p = PresContext()->TwipsToPixels();
+    nscoord rh = NSToCoordRound((float)mRowHeight*t2p);
 
     nscoord newrow = aNewIndex/rh;
     nsWeakFrame weakFrame(this);
@@ -4083,8 +4133,11 @@ NS_IMETHODIMP
 nsTreeBodyFrame::ClearStyleAndImageCaches()
 {
   mStyleCache.Clear();
-  mImageCache.EnumerateRead(CancelImageRequest, nsnull);
-  mImageCache.Clear();
+  if (mImageCache) {
+    mImageCache->Enumerate(CancelImageRequest);
+    delete mImageCache;
+  }
+  mImageCache = nsnull;
   return NS_OK;
 }
 

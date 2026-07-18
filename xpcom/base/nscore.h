@@ -383,8 +383,8 @@ typedef PRUint32 nsrefcnt;
   #define HAVE_CPP_ACCESS_CHANGING_USING
 
   #if (_MSC_VER==1100)
-      /* VC++5.0 has an internal compiler error (sometimes) without this */
-    #undef HAVE_CPP_ACCESS_CHANGING_USING
+      /* VC++5.0 has an internal compiler error (sometimes) without this 
+    #undef HAVE_CPP_ACCESS_CHANGING_USING */
   #endif
 
   #define HAVE_CPP_NAMESPACE_STD

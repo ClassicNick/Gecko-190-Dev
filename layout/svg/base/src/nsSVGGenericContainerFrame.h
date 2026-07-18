@@ -39,6 +39,7 @@
 #ifndef __NS_SVGGENERICCONTAINERFRAME_H__
 #define __NS_SVGGENERICCONTAINERFRAME_H__
 
+#include "nsCOMPtr.h"
 #include "nsIDOMSVGGElement.h"
 #include "nsPresContext.h"
 #include "nsSVGContainerFrame.h"

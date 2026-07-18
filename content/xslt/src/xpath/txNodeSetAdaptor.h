@@ -40,6 +40,7 @@
 #ifndef txNodeSetAdaptor_h__
 #define txNodeSetAdaptor_h__
 
+#include "nsCOMPtr.h"
 #include "txINodeSet.h"
 #include "txNodeSet.h"
 

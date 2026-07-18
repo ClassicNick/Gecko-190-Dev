@@ -48,6 +48,9 @@
 #include "nsIDocument.h"
 #include "nsIWidget.h"
 
+// Other Includes
+#include "nsIFrame.h"
+
 // nsPrintObject Document Type
 enum PrintObjectType  {eDoc = 0, eFrame = 1, eIFrame = 2, eFrameSet = 3};
 
@@ -88,7 +91,6 @@ public:
   PRPackedBool     mInvisible;        // Indicates PO is set to not visible by CSS
 
   float            mShrinkRatio;
-  float            mZoomRatio;
 
 private:
   nsPrintObject& operator=(const nsPrintObject& aOther); // not implemented

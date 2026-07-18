@@ -40,9 +40,10 @@
 #include "nsFrame.h"
 #include "nsWeakReference.h"
 #include "nsISVGValueObserver.h"
+#include <cairo.h>
 
 class nsSVGPaintServerFrame;
-class gfxContext;
+class nsISVGRendererCanvas;
 
 typedef nsFrame nsSVGGeometryFrameBase;
 
@@ -93,31 +94,23 @@ public:
   PRBool HasFill();
   PRBool HasStroke();
 
-  /*
-   * Set up a cairo context for filling a path
-   * @return PR_FALSE to skip rendering
-   */
-  PRBool SetupCairoFill(gfxContext *aContext, void **aClosure);
-  /*
-   * Clean up after path filled
-   */
-  void CleanupCairoFill(gfxContext *aContext, void *aClosure);
+  // Setup/Cleanup a cairo context for filling a path
+  nsresult SetupCairoFill(nsISVGRendererCanvas *aCanvas,
+                          cairo_t *aCtx,
+                          void **aClosure);
+  void CleanupCairoFill(cairo_t *aCtx, void *aClosure);
 
   // Set up a cairo context for measuring a stroked path
-  void SetupCairoStrokeGeometry(gfxContext *aContext);
+  void SetupCairoStrokeGeometry(cairo_t *aCtx);
 
   // Set up a cairo context for hit testing a stroked path
-  void SetupCairoStrokeHitGeometry(gfxContext *aContext);
+  void SetupCairoStrokeHitGeometry(cairo_t *aCtx);
 
-  /*
-   * Set up a cairo context for stroking a path
-   * @return PR_FALSE to skip rendering
-   */
-  PRBool SetupCairoStroke(gfxContext *aContext, void **aClosure);
-  /*
-   * Clean up after path stroked
-   */
-  void CleanupCairoStroke(gfxContext *aContext, void *aClosure);
+  // Setup/Cleanup a cairo context for stroking path
+  nsresult SetupCairoStroke(nsISVGRendererCanvas *aCanvas,
+                            cairo_t *aCtx,
+                            void **aClosure);
+  void CleanupCairoStroke(cairo_t *aCtx, void *aClosure);
 
 protected:
   virtual nsresult UpdateGraphic(PRBool suppressInvalidation = PR_FALSE) = 0;

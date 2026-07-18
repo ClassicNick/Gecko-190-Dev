@@ -40,6 +40,7 @@
 #define nsContentAreaDragDrop_h__
 
 
+#include "nsISupportsUtils.h"
 #include "nsCOMPtr.h"
 
 #include "nsIDragDropHandler.h"

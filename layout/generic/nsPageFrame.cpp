@@ -56,7 +56,6 @@
 #endif
 #include "nsIFontMetrics.h"
 #include "nsIPrintSettings.h"
-#include "nsRegion.h"
 
 #include "prlog.h"
 #ifdef PR_LOGGING 
@@ -134,11 +133,8 @@ NS_IMETHODIMP nsPageFrame::Reflow(nsPresContext*          aPresContext,
     }
     nsSize  maxSize(mPD->mReflowSize.width - mPD->mReflowMargin.LeftRight(),
                     avHeight);
-    float scale = aPresContext->GetPageScale();
-    maxSize.width = NSToCoordCeil(maxSize.width / scale);
-    maxSize.height = NSToCoordCeil(maxSize.height / scale);
     // Get the number of Twips per pixel from the PresContext
-    nscoord onePixelInTwips = nsPresContext::CSSPixelsToAppUnits(1);
+    nscoord onePixelInTwips = aPresContext->IntScaledPixelsToTwips(1);
     // insurance against infinite reflow, when reflowing less than a pixel
     // XXX Shouldn't we do something more friendly when invalid margins
     //     are set?
@@ -419,10 +415,10 @@ static void PaintPrintPreviewBackground(nsIFrame* aFrame, nsIRenderingContext* a
   NS_STATIC_CAST(nsPageFrame*, aFrame)->PaintPrintPreviewBackground(*aCtx, aPt);
 }
 
-static void PaintPageContent(nsIFrame* aFrame, nsIRenderingContext* aCtx,
-                             const nsRect& aDirtyRect, nsPoint aPt)
+static void PaintPageBackground(nsIFrame* aFrame, nsIRenderingContext* aCtx,
+                                const nsRect& aDirtyRect, nsPoint aPt)
 {
-  NS_STATIC_CAST(nsPageFrame*, aFrame)->PaintPageContent(*aCtx, aDirtyRect, aPt);
+  NS_STATIC_CAST(nsPageFrame*, aFrame)->DrawBackground(*aCtx, aDirtyRect, aPt);
 }
 
 static void PaintHeaderFooter(nsIFrame* aFrame, nsIRenderingContext* aCtx,
@@ -438,16 +434,20 @@ nsPageFrame::BuildDisplayList(nsDisplayListBuilder*   aBuilder,
                               const nsDisplayListSet& aLists)
 {
   nsDisplayListCollection set;
-  nsresult rv;
-
+  
   if (PresContext()->IsScreen()) {
-    rv = set.BorderBackground()->AppendNewToTop(new (aBuilder)
+    nsresult rv = set.BorderBackground()->AppendNewToTop(new (aBuilder)
         nsDisplayGeneric(this, ::PaintPrintPreviewBackground, "PrintPreviewBackground"));
     NS_ENSURE_SUCCESS(rv, rv);
   }
-
-  rv = set.BorderBackground()->AppendNewToTop(new (aBuilder)
-        nsDisplayGeneric(this, ::PaintPageContent, "PageContent"));
+  
+  nsresult rv = set.BorderBackground()->AppendNewToTop(new (aBuilder)
+        nsDisplayGeneric(this, ::PaintPageBackground, "PageBackground"));
+  NS_ENSURE_SUCCESS(rv, rv);
+    
+  // REVIEW: There was a "aRenderingContext.SetColor(NS_RGB(255,255,255));"
+  // here which was overridden on every code path, so I removed it.
+  rv = nsContainerFrame::BuildDisplayList(aBuilder, aDirtyRect, set);
   NS_ENSURE_SUCCESS(rv, rv);
 
   if (PresContext()->IsRootPaginatedDocument()) {
@@ -554,37 +554,22 @@ nsPageFrame::PaintHeaderFooter(nsIRenderingContext& aRenderingContext,
 
 //------------------------------------------------------------------------------
 void
-nsPageFrame::PaintPageContent(nsIRenderingContext& aRenderingContext,
-                              const nsRect&        aDirtyRect,
-                              nsPoint              aPt) {
-  nsIFrame* pageContentFrame  = mFrames.FirstChild();
-  nsRect rect = aDirtyRect;
-  float scale = PresContext()->GetPageScale();
-  aRenderingContext.PushState();
-  // Make sure we don't draw where we aren't supposed to draw, especially
-  // when printing selection
-  nsRect clipRect(nsPoint(0, 0), GetSize());
-  clipRect.Deflate(mPD->mReflowMargin);
-  aRenderingContext.SetClipRect(clipRect, nsClipCombine_kIntersect);
-  // aPt translates to coords relative to this, then margins translate to
-  // pageContentFrame's coords
-  nsPoint framePos = aPt + pageContentFrame->GetOffsetTo(this);
-  aRenderingContext.Translate(framePos.x, framePos.y);
-  rect -= framePos;
-  aRenderingContext.Scale(scale, scale);
-  rect.ScaleRoundOut(1.0f / scale);
+nsPageFrame::DrawBackground(nsIRenderingContext& aRenderingContext,
+                            const nsRect&        aDirtyRect,
+                            nsPoint              aPt) 
+{
+  nsSimplePageSequenceFrame* seqFrame = NS_STATIC_CAST(nsSimplePageSequenceFrame*, mParent);
+  if (seqFrame != nsnull) {
+    nsIFrame* pageContentFrame  = mFrames.FirstChild();
+    NS_ASSERTION(pageContentFrame, "Must always be there.");
 
-  const nsStyleBorder* border = GetStyleBorder();
-  const nsStylePadding* padding = GetStylePadding();
-  nsRect backgroundRect = nsRect(nsPoint(0, 0), pageContentFrame->GetSize());
-  nsCSSRendering::PaintBackground(PresContext(), aRenderingContext, this,
-                                  rect, backgroundRect, *border, *padding,
-                                  PR_TRUE);
+    const nsStyleBorder* border = GetStyleBorder();
+    const nsStylePadding* padding = GetStylePadding();
 
-  nsLayoutUtils::PaintFrame(&aRenderingContext, pageContentFrame,
-                            nsRegion(rect), NS_RGBA(0,0,0,0));
-
-  aRenderingContext.PopState();
+    nsCSSRendering::PaintBackground(PresContext(), aRenderingContext, this,
+                                    aDirtyRect, pageContentFrame->GetRect() + aPt, *border, *padding,
+                                    PR_TRUE);
+  }
 }
 
 void
@@ -621,7 +606,7 @@ nsPageBreakFrame::~nsPageBreakFrame()
 nscoord
 nsPageBreakFrame::GetIntrinsicWidth()
 {
-  return nsPresContext::CSSPixelsToAppUnits(1);
+  return PresContext()->IntScaledPixelsToTwips(1);
 }
 
 nsresult 
@@ -639,7 +624,7 @@ nsPageBreakFrame::Reflow(nsPresContext*          aPresContext,
   aDesiredSize.height = aReflowState.availableHeight;
   // round the height down to the nearest pixel
   aDesiredSize.height -=
-    aDesiredSize.height % nsPresContext::CSSPixelsToAppUnits(1);
+    aDesiredSize.height % PresContext()->IntScaledPixelsToTwips(1);
 
   // Note: not using NS_FRAME_FIRST_REFLOW here, since it's not clear whether
   // DidReflow will always get called before the next Reflow() call.

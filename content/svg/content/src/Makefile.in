@@ -63,8 +63,7 @@ REQUIRES	= xpcom \
 		  webshell \
 		  unicharutil \
 		  imglib2 \
-		  docshell \
-		  thebes
+		  docshell
 
 CPPSRCS		= \
 		nsDOMSVGZoomEvent.cpp \

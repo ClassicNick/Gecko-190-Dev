@@ -1692,10 +1692,11 @@ nsCSSOffsetState::InitOffsets(nscoord aContainingBlockWidth,
       presContext->GetTheme()->GetWidgetPadding(presContext->DeviceContext(),
                                                 frame, disp->mAppearance,
                                                 &mComputedPadding)) {
-    mComputedPadding.top = presContext->DevPixelsToAppUnits(mComputedPadding.top);
-    mComputedPadding.right = presContext->DevPixelsToAppUnits(mComputedPadding.right);
-    mComputedPadding.bottom = presContext->DevPixelsToAppUnits(mComputedPadding.bottom);
-    mComputedPadding.left = presContext->DevPixelsToAppUnits(mComputedPadding.left);
+    float p2t = presContext->ScaledPixelsToTwips();
+    mComputedPadding.top = NSIntPixelsToTwips(mComputedPadding.top, p2t);
+    mComputedPadding.right = NSIntPixelsToTwips(mComputedPadding.right, p2t);
+    mComputedPadding.bottom = NSIntPixelsToTwips(mComputedPadding.bottom, p2t);
+    mComputedPadding.left = NSIntPixelsToTwips(mComputedPadding.left, p2t);
   }
   else if (aPadding) { // padding is an input arg
     mComputedPadding.top    = aPadding->top;
@@ -1711,14 +1712,15 @@ nsCSSOffsetState::InitOffsets(nscoord aContainingBlockWidth,
     presContext->GetTheme()->GetWidgetBorder(presContext->DeviceContext(),
                                              frame, disp->mAppearance,
                                              &mComputedBorderPadding);
+    float p2t = presContext->ScaledPixelsToTwips();
     mComputedBorderPadding.top =
-      presContext->DevPixelsToAppUnits(mComputedBorderPadding.top);
+      NSIntPixelsToTwips(mComputedBorderPadding.top, p2t);
     mComputedBorderPadding.right =
-      presContext->DevPixelsToAppUnits(mComputedBorderPadding.right);
+      NSIntPixelsToTwips(mComputedBorderPadding.right, p2t);
     mComputedBorderPadding.bottom =
-      presContext->DevPixelsToAppUnits(mComputedBorderPadding.bottom);
+      NSIntPixelsToTwips(mComputedBorderPadding.bottom, p2t);
     mComputedBorderPadding.left =
-      presContext->DevPixelsToAppUnits(mComputedBorderPadding.left);
+      NSIntPixelsToTwips(mComputedBorderPadding.left, p2t);
   }
   else if (aBorder) {  // border is an input arg
     mComputedBorderPadding = *aBorder;

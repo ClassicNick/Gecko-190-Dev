@@ -75,6 +75,7 @@ REQUIRES	= \
 		plugin \
 		cairo \
 		libpixman \
+		thebes \
 		$(NULL)
 
 ifdef MOZ_ENABLE_CAIRO_GFX

@@ -38,8 +38,12 @@
 
 #include "nsIDOMSVGTransformable.h"
 #include "nsSVGGFrame.h"
+#include "nsISVGRenderer.h"
+#include "nsISVGRendererCanvas.h"
 #include "nsIFrame.h"
 #include "nsSVGMatrix.h"
+#include "nsSVGClipPathFrame.h"
+#include "nsISVGRendererCanvas.h"
 #include "nsGkAtoms.h"
 #include "nsSVGUtils.h"
 #include "nsISVGValueUtils.h"

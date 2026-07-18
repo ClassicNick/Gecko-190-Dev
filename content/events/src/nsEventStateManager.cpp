@@ -42,6 +42,7 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+#include "nsISupportsUtils.h"
 #include "nsCOMPtr.h"
 #include "nsEventStateManager.h"
 #include "nsEventListenerManager.h"

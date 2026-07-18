@@ -38,13 +38,13 @@
 #ifndef nsAboutCache_h__
 #define nsAboutCache_h__
 
+#include "nsCOMPtr.h"
 #include "nsIAboutModule.h"
 
 #include "nsString.h"
 #include "nsIOutputStream.h"
 
 #include "nsICacheVisitor.h"
-#include "nsCOMPtr.h"
 
 class nsAboutCache : public nsIAboutModule 
                    , public nsICacheVisitor

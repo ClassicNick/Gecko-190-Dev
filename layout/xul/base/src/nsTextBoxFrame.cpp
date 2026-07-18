@@ -45,9 +45,9 @@
 // See documentation in associated header file
 //
 
+#include "nsCOMPtr.h"
 #include "nsReadableUtils.h"
 #include "nsTextBoxFrame.h"
-#include "nsCOMPtr.h"
 #include "nsIDeviceContext.h"
 #include "nsIFontMetrics.h"
 #include "nsGkAtoms.h"

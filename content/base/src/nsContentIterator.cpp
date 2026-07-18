@@ -51,6 +51,7 @@
 #include "nsVoidArray.h"
 #include "nsContentUtils.h"
 #include "nsINode.h"
+#include "nsIFrame.h"
 
 static NS_DEFINE_IID(kISupportsIID, NS_ISUPPORTS_IID);
 

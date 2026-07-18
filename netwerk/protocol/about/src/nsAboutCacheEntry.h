@@ -39,6 +39,7 @@
 #ifndef nsAboutCacheEntry_h__
 #define nsAboutCacheEntry_h__
 
+#include "nsCOMPtr.h"
 #include "nsIAboutModule.h"
 #include "nsIChannel.h"
 #include "nsICacheListener.h"
@@ -48,7 +49,6 @@
 #include "nsIOutputStream.h"
 #include "nsIInputStreamChannel.h"
 #include "nsIURI.h"
-#include "nsCOMPtr.h"
 #include "nsString.h"
 
 class nsICacheEntryDescriptor;

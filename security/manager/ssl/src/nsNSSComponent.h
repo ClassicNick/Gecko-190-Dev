@@ -44,6 +44,7 @@
 #ifndef _nsNSSComponent_h_
 #define _nsNSSComponent_h_
 
+#include "nsISupportsUtils.h"
 #include "nsCOMPtr.h"
 #include "nsISignatureVerifier.h"
 #include "nsIURIContentListener.h"

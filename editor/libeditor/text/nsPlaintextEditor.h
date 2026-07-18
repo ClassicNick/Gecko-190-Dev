@@ -39,6 +39,7 @@
 #ifndef nsPlaintextEditor_h__
 #define nsPlaintextEditor_h__
 
+#include "nsISupportsUtils.h"
 #include "nsCOMPtr.h"
 
 #include "nsIPlaintextEditor.h"

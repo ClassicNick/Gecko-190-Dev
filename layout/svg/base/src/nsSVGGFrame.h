@@ -43,6 +43,8 @@
 
 typedef nsSVGDisplayContainerFrame nsSVGGFrameBase;
 
+class nsISVGFilterFrame;
+
 class nsSVGGFrame : public nsSVGGFrameBase
 {
 public:

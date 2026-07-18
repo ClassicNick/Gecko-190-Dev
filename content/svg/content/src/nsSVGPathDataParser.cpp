@@ -36,6 +36,7 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+#include "nsCOMPtr.h"
 #include "nsSVGPathDataParser.h"
 #include "nsSVGDataParser.h"
 #include "nsSVGPathSeg.h"

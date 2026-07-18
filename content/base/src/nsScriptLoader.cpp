@@ -41,6 +41,7 @@
  * A class that handles loading and evaluation of <script> elements.
  */
 
+#include "nsCOMPtr.h"
 #include "nsScriptLoader.h"
 #include "nsIDOMCharacterData.h"
 #include "nsParserUtils.h"

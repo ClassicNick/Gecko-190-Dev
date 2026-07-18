@@ -217,7 +217,7 @@ public:
                                      nscolor                  aBorderColor,
                                      const nsStyleBackground* aBGColor,
                                      const nsRect&            aBorderRect,
-                                     PRInt32                  aAppUnitsPerCSSPixel,
+                                     float					  aPixelsToTwips,
                                      PRUint8                  aStartBevelSide = 0,
                                      nscoord                  aStartBevelOffset = 0,
                                      PRUint8                  aEndBevelSide = 0,

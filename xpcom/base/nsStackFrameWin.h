@@ -55,6 +55,24 @@
 #endif
 #endif
 
+#if defined (_MSC_VER) && _MSC_VER <= 1100
+//
+// source file line data structure
+//
+typedef struct _IMAGEHLP_LINE
+{
+    DWORD                       SizeOfStruct;           // set to sizeof(IMAGEHLP_LINE)
+    DWORD                       Key;                    // internal
+    DWORD                       LineNumber;             // line number in file
+    PCHAR                       FileName;               // full filename
+    DWORD                       Address;                // first instruction of line
+} IMAGEHLP_LINE, *PIMAGEHLP_LINE;
+
+#define SYMOPT_LOAD_LINES        0x00000010
+
+typedef unsigned __int64 DWORD64;
+#endif
+
 // Define these as static pointers so that we can load the DLL on the
 // fly (and not introduce a link-time dependency on it). Tip o' the
 // hat to Matt Pietrick for this idea. See:

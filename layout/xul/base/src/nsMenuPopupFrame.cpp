@@ -421,11 +421,8 @@ nsMenuPopupFrame::AdjustClientXYForNestedDocuments ( nsIDOMXULDocument* inPopupD
   }
   nsPoint pixelOffset ( targetDocTopLeft.x - popupDocTopLeft.x, targetDocTopLeft.y - popupDocTopLeft.y );
 
-  nsPresContext* context = PresContext();
-  *outAdjX = nsPresContext::CSSPixelsToAppUnits(inClientX) +
-             context->DevPixelsToAppUnits(pixelOffset.x);
-  *outAdjY = nsPresContext::CSSPixelsToAppUnits(inClientY) +
-             context->DevPixelsToAppUnits(pixelOffset.y);
+  *outAdjX = inClientX + pixelOffset.x;
+  *outAdjY = inClientY + pixelOffset.y;
   
 } // AdjustClientXYForNestedDocuments
 
@@ -686,6 +683,14 @@ nsMenuPopupFrame::SyncViewWithFrame(nsPresContext* aPresContext,
   //   The dimensions of the frame invoking the popup. 
   nsRect parentRect = aFrame->GetRect();
 
+  float p2t = aPresContext->ScaledPixelsToTwips();
+
+  nsIViewManager* viewManager = containingView->GetViewManager();
+    
+  nsCOMPtr<nsIDeviceContext> dx;
+  viewManager->GetDeviceContext(*getter_AddRefs(dx));
+  float t2p = dx->AppUnitsToDevUnits();
+
   // get the document and the global script object
   nsIPresShell *presShell = aPresContext->PresShell();
   nsIDocument *document = presShell->GetDocument();
@@ -717,11 +722,15 @@ nsMenuPopupFrame::SyncViewWithFrame(nsPresContext* aPresContext,
     // the popup. However, we may be deeply nested in a frameset, etc and so the client coordinates
     // need some adjusting. 
     nsCOMPtr<nsIDOMXULDocument> xulDoc ( do_QueryInterface(document) );
-    AdjustClientXYForNestedDocuments ( xulDoc, presShell, aXPos, aYPos, &xpos, &ypos );
+    PRInt32 newXPos = 0, newYPos = 0;
+    AdjustClientXYForNestedDocuments ( xulDoc, presShell, aXPos, aYPos, &newXPos, &newYPos );
+
+    xpos = NSIntPixelsToTwips(newXPos, p2t);
+    ypos = NSIntPixelsToTwips(newYPos, p2t);
 
     // Add in the top and left margins
     GetStyleMargin()->GetMargin(margin);
-
+    
     xpos += margin.left;
     ypos += margin.top;
   } 
@@ -743,32 +752,46 @@ nsMenuPopupFrame::SyncViewWithFrame(nsPresContext* aPresContext,
   if (!window)
     return NS_OK;
 
-  nsIDeviceContext* devContext = PresContext()->DeviceContext();
+  nsCOMPtr<nsIDOMScreen> screen;
+  window->GetScreen(getter_AddRefs(screen));
+  PRInt32 screenWidth = 0, screenHeight = 0;
+  PRInt32 screenLeft = 0, screenTop = 0;
+  PRInt32 screenRight = 0, screenBottom = 0;
   nsRect rect;
   if ( mMenuCanOverlapOSBar ) {
-    devContext->GetRect(rect);
+    screen->GetLeft(&screenLeft);
+    screen->GetTop(&screenTop);
+    screen->GetWidth(&screenWidth);
+    screen->GetHeight(&screenHeight);
   }
   else {
-    devContext->GetClientRect(rect);
+    screen->GetAvailLeft(&screenLeft);
+    screen->GetAvailTop(&screenTop); 
+    screen->GetAvailWidth(&screenWidth);
+    screen->GetAvailHeight(&screenHeight);
   }
 
   // keep 3px margin to the right and bottom of the screen for WinXP dropshadow
-  rect.width  -= nsPresContext::CSSPixelsToAppUnits(3);
-  rect.height -= nsPresContext::CSSPixelsToAppUnits(3);
+  screenWidth -= 3;
+  screenHeight -= 3;
+  screenRight = screenLeft + screenWidth;
+  screenBottom = screenTop + screenHeight;
+  rect.width  -= aPresContext->IntScaledPixelsToTwips(3);
+  rect.height -= aPresContext->IntScaledPixelsToTwips(3);
 
   // for content shells, clip to the client area rather than the screen area
   if (mInContentShell) {
     nsRect rootScreenRect = presShell->GetRootFrame()->GetScreenRect();
-    rootScreenRect.ScaleRoundIn(aPresContext->AppUnitsPerDevPixel());
+    rootScreenRect.ScaleRoundIn(aPresContext->TwipsToPixels());
     rect.IntersectRect(rect, rootScreenRect);
   }
-
-  PRInt32 screenLeftTwips   = rect.x;
-  PRInt32 screenTopTwips    = rect.y;
-  PRInt32 screenWidthTwips  = rect.width;
-  PRInt32 screenHeightTwips = rect.height;
-  PRInt32 screenRightTwips  = rect.XMost();
-  PRInt32 screenBottomTwips = rect.YMost();
+  
+  PRInt32 screenLeftTwips    = NSIntPixelsToTwips(screenLeft, p2t);
+  PRInt32 screenTopTwips   = NSIntPixelsToTwips(screenTop, p2t);
+  PRInt32 screenWidthTwips  = NSIntPixelsToTwips(screenWidth, p2t);
+  PRInt32 screenHeightTwips = NSIntPixelsToTwips(screenHeight, p2t);
+  PRInt32 screenRightTwips  = NSIntPixelsToTwips(screenRight, p2t);
+  PRInt32 screenBottomTwips = NSIntPixelsToTwips(screenBottom, p2t);
   
   // Recall that |xpos| and |ypos| are in the coordinate system of the parent view. In
   // order to determine the screen coordinates of where our view will end up, we
@@ -795,9 +818,9 @@ nsMenuPopupFrame::SyncViewWithFrame(nsPresContext* aPresContext,
   nsIWidget* parentViewWidget = containingView->GetNearestWidget(&parentViewWidgetOffset);
   nsRect localParentWidgetRect(0,0,0,0), screenParentWidgetRect;
   parentViewWidget->WidgetToScreen ( localParentWidgetRect, screenParentWidgetRect );
-  PRInt32 screenViewLocX = aPresContext->DevPixelsToAppUnits(screenParentWidgetRect.x) +
+  PRInt32 screenViewLocX = NSIntPixelsToTwips(screenParentWidgetRect.x,p2t) +
     (xpos - parentPos.x) + parentViewWidgetOffset.x;
-  PRInt32 screenViewLocY = aPresContext->DevPixelsToAppUnits(screenParentWidgetRect.y) +
+  PRInt32 screenViewLocY = NSIntPixelsToTwips(screenParentWidgetRect.y,p2t) +
     (ypos - parentPos.y) + parentViewWidgetOffset.y;
 
   if ( anchoredToParent ) {
@@ -828,11 +851,11 @@ nsMenuPopupFrame::SyncViewWithFrame(nsPresContext* aPresContext,
 
     // compute screen coordinates of parent frame so we can play with it. Make sure we put it
     // into twips as everything else is as well.
-    nsRect screenParentFrameRect (aPresContext->AppUnitsToDevPixels(offset.x), aPresContext->AppUnitsToDevPixels(offset.y),
+    nsRect screenParentFrameRect ( NSTwipsToIntPixels(offset.x,t2p), NSTwipsToIntPixels(offset.y,t2p),
                                     parentRect.width, parentRect.height );
     parentViewWidget->WidgetToScreen ( screenParentFrameRect, screenParentFrameRect );
-    screenParentFrameRect.x = aPresContext->DevPixelsToAppUnits(screenParentFrameRect.x);
-    screenParentFrameRect.y = aPresContext->DevPixelsToAppUnits(screenParentFrameRect.y);
+    screenParentFrameRect.x = NSIntPixelsToTwips(screenParentFrameRect.x, p2t);
+    screenParentFrameRect.y = NSIntPixelsToTwips(screenParentFrameRect.y, p2t);
 
     // Don't let it spill off the screen to the top
     if (screenViewLocY < screenTopTwips) {
@@ -994,7 +1017,7 @@ nsMenuPopupFrame::SyncViewWithFrame(nsPresContext* aPresContext,
     }
   }  
 
-  aPresContext->GetViewManager()->MoveViewTo(view, xpos, ypos); 
+  viewManager->MoveViewTo(view, xpos, ypos); 
 
   // Now that we've positioned the view, sync up the frame's origin.
   nsPoint frameOrigin = GetPosition();

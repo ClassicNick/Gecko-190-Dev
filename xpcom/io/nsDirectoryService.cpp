@@ -50,12 +50,19 @@
 #include "nsISimpleEnumerator.h"
 #include "nsIStringEnumerator.h"
 
-#if defined(XP_WIN)
+#if defined(XP_MAC)
+#include <Folders.h>
+#include <Files.h>
+#include <Memory.h>
+#include <Processes.h>
+#include <Gestalt.h>
+#elif defined(XP_WIN)
+#include "nsWinAPIs.h"
 #include <windows.h>
 #include <shlobj.h>
 #include <stdlib.h>
 #include <stdio.h>
-#elif defined(XP_UNIX)
+#elif defined(XP_UNIX) || defined(XP_MACOSX)
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/param.h>
@@ -86,8 +93,13 @@
 #include "SpecialSystemDirectory.h"
 #include "nsAppFileLocationProvider.h"
 
+#if defined(XP_MAC)
+#define COMPONENT_REGISTRY_NAME NS_LITERAL_CSTRING("Component Registry")
+#define COMPONENT_DIRECTORY     NS_LITERAL_CSTRING("Components")
+#else
 #define COMPONENT_REGISTRY_NAME NS_LITERAL_CSTRING("compreg.dat")
 #define COMPONENT_DIRECTORY     NS_LITERAL_CSTRING("components")
+#endif 
 
 #define XPTI_REGISTRY_NAME      NS_LITERAL_CSTRING("xpti.dat")
 
@@ -95,7 +107,7 @@
 // For Windows platform, We are choosing Appdata folder as HOME
 #if defined (XP_WIN)
 #define HOME_DIR NS_WIN_APPDATA_DIR
-#elif defined (XP_MACOSX)
+#elif defined (XP_MAC) || defined (XP_MACOSX)
 #define HOME_DIR NS_OSX_HOME_DIR
 #elif defined (XP_UNIX)
 #define HOME_DIR NS_UNIX_HOME_DIR
@@ -146,7 +158,7 @@ nsDirectoryService::GetCurrentProcessDirectory(nsILocalFile** aFile)
 
 #ifdef XP_WIN
     PRUnichar buf[MAX_PATH];
-    if ( ::GetModuleFileNameW(0, buf, sizeof(buf)) )
+    if ( nsWinAPIs::mGetModuleFileName(0, buf, sizeof(buf)) )
     {
         // chop off the executable name by finding the rightmost backslash
         PRUnichar* lastSlash = wcsrchr(buf, L'\\');
@@ -158,6 +170,35 @@ nsDirectoryService::GetCurrentProcessDirectory(nsILocalFile** aFile)
         return NS_OK;
     }
 
+#elif defined(XP_MAC)
+    // get info for the the current process to determine the directory
+    // its located in
+    OSErr err;
+    ProcessSerialNumber psn = {kNoProcess, kCurrentProcess};
+    ProcessInfoRec pInfo;
+    FSSpec         tempSpec;
+
+    // initialize ProcessInfoRec before calling
+    // GetProcessInformation() or die horribly.
+    pInfo.processName = nil;
+    pInfo.processAppSpec = &tempSpec;
+    pInfo.processInfoLength = sizeof(ProcessInfoRec);
+
+    err = GetProcessInformation(&psn, &pInfo);
+    if (!err)
+    {
+        // create an FSSpec from the volume and dirid of the app.
+        FSSpec appFSSpec;
+        ::FSMakeFSSpec(pInfo.processAppSpec->vRefNum, pInfo.processAppSpec->parID, 0, &appFSSpec);
+        
+        nsCOMPtr<nsILocalFileMac> localFileMac = do_QueryInterface((nsIFile*)localFile);
+        if (localFileMac) 
+        {
+            localFileMac->InitWithFSSpec(&appFSSpec);
+            *aFile = localFile;
+            return NS_OK;
+        }
+    }
 #elif defined(XP_MACOSX)
     // Works even if we're not bundled.
     CFBundleRef appBundle = CFBundleGetMainBundle();

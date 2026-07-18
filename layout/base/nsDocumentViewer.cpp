@@ -680,8 +680,12 @@ DocumentViewerImpl::InitPresentationStuff(PRBool aDoInitialReflow)
   nsRect bounds;
   mWindow->GetBounds(bounds);
 
-  nscoord width = mPresContext->DevPixelsToAppUnits(bounds.width);
-  nscoord height = mPresContext->DevPixelsToAppUnits(bounds.height);
+  float p2t;
+
+  p2t = mPresContext->PixelsToTwips();
+
+  nscoord width = NSIntPixelsToTwips(bounds.width, p2t);
+  nscoord height = NSIntPixelsToTwips(bounds.height, p2t);
 
   mViewManager->DisableRefresh();
   mViewManager->SetWindowDimensions(width, height);
@@ -788,6 +792,14 @@ DocumentViewerImpl::InitInternal(nsIWidget* aParentWidget,
 
   mDeviceContext = aDeviceContext;
 
+#if defined(NS_PRINTING) && defined(NS_PRINT_PREVIEW)
+  // Clear PrintPreview Alternate Device
+  if (mDeviceContext) {
+    mDeviceContext->SetAltDevice(nsnull);
+    mDeviceContext->SetCanonicalPixelScale(1.0);
+  }
+#endif
+
   PRBool makeCX = PR_FALSE;
   if (aDoCreation) {
     if (aParentWidget && !mPresContext) {
@@ -827,35 +839,30 @@ DocumentViewerImpl::InitInternal(nsIWidget* aParentWidget,
 
 #ifdef NS_PRINT_PREVIEW
       if (mIsPageMode) {
-        // I'm leaving this in a broken state for the moment; we should
-        // be measuring/scaling with the print device context, not the
-        // screen device context, but this is good enough to allow
-        // printing reftests to work.
-#if 0
+        nsCOMPtr<nsIDeviceContext> devctx;
         nsCOMPtr<nsIDeviceContextSpec> devspec =
-          do_CreateInstance("@mozilla.org/gfx/devicecontextspec;1", &rv);
-        NS_ENSURE_SUCCESS(rv, rv);
+          do_CreateInstance("@mozilla.org/gfx/devicecontextspec;1");
+        // XXX CRASHES ON OOM. YUM. WOULD SOMEONE PLEASE FIX ME.
+        //     PERHAPS SOMEONE SHOULD HAVE REVIEWED THIS CODE.
+        // XXX I have no idea how critical this code is, so i'm not fixing it.
+        //     In fact I'm just adding a line that makes this block
+        //     get compiled *less* often.
         // mWindow has been initialized by preceding call to MakeWindow
-        rv = devspec->Init(mWindow, mPresContext->GetPrintSettings(), PR_FALSE);
-        NS_ENSURE_SUCCESS(rv, rv);
-        nsCOMPtr<nsIDeviceContext> devctx =
-          do_CreateInstance("@mozilla.org/gfx/devicecontext;1", &rv);
-        NS_ENSURE_SUCCESS(rv, rv);
-        rv = devctx->InitForPrinting(devspec);
-        NS_ENSURE_SUCCESS(rv, rv);
-        // XXX I'm breaking this code; I'm not sure I really want to mess with
-        // the document viewer at the moment to get the right device context
-        // (this won't break anyone, since page layout mode was never really
-        // usable)
-#endif
-        PRInt32 pageWidth = 0, pageHeight = 0;
-        mPresContext->GetPrintSettings()->GetPageSizeInTwips(&pageWidth,
-                                                             &pageHeight);
-        mPresContext->SetPageSize(
-          nsSize(mPresContext->TwipsToAppUnits(pageWidth),
-                 mPresContext->TwipsToAppUnits(pageHeight)));
+        devspec->Init(mWindow, mPresContext->GetPrintSettings(), PR_FALSE);
+        // XXX CRASHES ON OOM under at least
+        // nsPrintJobFactoryPS::CreatePrintJob. WOULD SOMEONE PLEASE FIX ME.
+        //     PERHAPS SOMEONE SHOULD HAVE REVIEWED THIS CODE.
+        // XXX I have no idea how critical this code is, so i'm not fixing it.
+        //     In fact I'm just adding a line that makes this block
+        //     get compiled *less* often.
+        mDeviceContext->GetDeviceContextFor(devspec, *getter_AddRefs(devctx));
+        mDeviceContext->SetAltDevice(devctx);
+        mDeviceContext->SetUseAltDC(kUseAltDCFor_SURFACE_DIM, PR_TRUE);
+        //Get paper dims:
+        PRInt32 pageWidth, pageHeight;
+        devctx->GetDeviceSurfaceDimensions(pageWidth, pageHeight);
+        mPresContext->SetPageSize(nsSize(pageWidth, pageHeight));
         mPresContext->SetIsRootPaginatedDocument(PR_TRUE);
-        mPresContext->SetPageScale(1.0f);
       }
 #endif
     }
@@ -911,8 +918,9 @@ DocumentViewerImpl::DumpContentToPPM(const char* aFileName)
     mViewManager->GetRootView(view);
   }
   nsRect r = view->GetBounds() - view->GetPosition();
+  float p2t = mPresContext->PixelsToTwips();
   // Limit the bitmap size to 5000x5000
-  nscoord twipLimit = mPresContext->DevPixelsToAppUnits(5000);
+  nscoord twipLimit = NSIntPixelsToTwips(5000, p2t);
   if (r.height > twipLimit)
     r.height = twipLimit;
   if (r.width > twipLimit)
@@ -936,8 +944,9 @@ DocumentViewerImpl::DumpContentToPPM(const char* aFileName)
       if (!surface) {
         status = "NOSURFACE";
       } else {
-        PRUint32 width = mPresContext->AppUnitsToDevPixels(view->GetBounds().width);
-        PRUint32 height = mPresContext->AppUnitsToDevPixels(view->GetBounds().height);
+        float t2p = mPresContext->TwipsToPixels();
+        PRUint32 width = NSTwipsToIntPixels(view->GetBounds().width, t2p);
+        PRUint32 height = NSTwipsToIntPixels(view->GetBounds().height, t2p);
 
         PRUint8* data;
         PRInt32 rowLen, rowSpan;
@@ -1948,6 +1957,13 @@ DocumentViewerImpl::Show(void)
 
     mDeviceContext = mParentWidget->GetDeviceContext();
 
+#if defined(NS_PRINTING) && defined(NS_PRINT_PREVIEW)
+    // Clear PrintPreview Alternate Device
+    if (mDeviceContext) {
+      mDeviceContext->SetAltDevice(nsnull);
+    }
+#endif
+
     // Create presentation context
     NS_ASSERTION(!mPresContext, "Shouldn't have a prescontext if we have no shell!");
     mPresContext = new nsPresContext(mDocument, nsPresContext::eContext_Galley);
@@ -2273,7 +2289,9 @@ DocumentViewerImpl::MakeWindow(nsIWidget* aParentWidget,
   nsIDeviceContext *dx = mPresContext->DeviceContext();
 
   nsRect tbounds = aBounds;
-  tbounds *= mPresContext->AppUnitsPerDevPixel();
+  float p2t;
+  p2t = mPresContext->PixelsToTwips();
+  tbounds *= p2t;
 
    // Initialize the view manager with an offset. This allows the viewmanager
    // to manage a coordinate space offset from (0,0)
@@ -3061,6 +3079,7 @@ NS_IMETHODIMP DocumentViewerImpl::SizeToContent()
    NS_ENSURE_TRUE(presContext, NS_ERROR_FAILURE);
 
    PRInt32 width, height;
+   float   pixelScale;
 
    // so how big is it?
    nsRect shellArea = presContext->GetVisibleArea();
@@ -3069,8 +3088,9 @@ NS_IMETHODIMP DocumentViewerImpl::SizeToContent()
      // Protect against bogus returns here
      return NS_ERROR_FAILURE;
    }
-   width = presContext->AppUnitsToDevPixels(shellArea.width);
-   height = presContext->AppUnitsToDevPixels(shellArea.height);
+   pixelScale = presContext->TwipsToPixels();
+   width = PRInt32((float)shellArea.width*pixelScale);
+   height = PRInt32((float)shellArea.height*pixelScale);
 
    nsCOMPtr<nsIDocShellTreeOwner> treeOwner;
    docShellAsItem->GetTreeOwner(getter_AddRefs(treeOwner));

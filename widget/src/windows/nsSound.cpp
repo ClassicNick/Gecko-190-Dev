@@ -55,6 +55,50 @@
 
 NS_IMPL_ISUPPORTS2(nsSound, nsISound, nsIStreamLoaderObserver)
 
+////////////////////////////////////////////////////////////////////////
+// This hidden class is used to load the winmm.dll when it's needed.
+
+class CWinMM {
+  typedef int (CALLBACK *PlayPtr)(const char*,HMODULE,DWORD);
+
+public:
+
+  static CWinMM& GetModule() {
+    static CWinMM gSharedWinMM;  //construct this only after you *really* need it.
+    return gSharedWinMM;
+  }
+
+
+  CWinMM(const char* aModuleName="WINMM.DLL") {
+    mInstance=::LoadLibrary(aModuleName);  
+    mPlay=(mInstance) ? (PlayPtr)GetProcAddress(mInstance,"PlaySound") : 0;
+    sIsInitialized = PR_TRUE;
+  }
+
+  ~CWinMM() {
+    if(mInstance)
+      ::FreeLibrary(mInstance);
+    mInstance=0;
+    mPlay=0;
+  }
+
+  BOOL PlaySound(const char *aSoundFile,HMODULE aModule,DWORD aOptions) {
+    return (mPlay) ? mPlay(aSoundFile, aModule, aOptions) : FALSE;
+  }
+
+  static BOOL IsInitialized() {
+    return sIsInitialized;
+  }
+ 
+private:
+  HINSTANCE mInstance;  
+  PlayPtr mPlay;
+  static BOOL sIsInitialized;
+};
+
+BOOL CWinMM::sIsInitialized = PR_FALSE;
+
+////////////////////////////////////////////////////////////////////////
 
 nsSound::nsSound()
 {
@@ -69,7 +113,8 @@ nsSound::~nsSound()
 void nsSound::PurgeLastSound() {
   if (mLastSound) {
     // Purge the current sound buffer.
-    ::PlaySound(nsnull, nsnull, SND_PURGE); // This call halts the sound if it was still playing.
+    CWinMM& theMM = CWinMM::GetModule();
+    theMM.PlaySound(nsnull, nsnull, SND_PURGE); // This call halts the sound if it was still playing.
 
     // Now delete the buffer.
     free(mLastSound);
@@ -125,7 +170,8 @@ NS_IMETHODIMP nsSound::OnStreamComplete(nsIStreamLoader *aLoader,
       flags |= SND_ASYNC;
     }
 
-    ::PlaySound(NS_REINTERPRET_CAST(const char*, data), 0, flags);
+    CWinMM& theMM = CWinMM::GetModule();
+    theMM.PlaySound(NS_REINTERPRET_CAST(const char*, data), 0, flags);
   }
 
   return NS_OK;
@@ -150,12 +196,16 @@ NS_IMETHODIMP nsSound::Play(nsIURL *aURL)
 
 NS_IMETHODIMP nsSound::Init()
 {
+  if (CWinMM::IsInitialized())
+    return NS_OK;
+  CWinMM& theMM = CWinMM::GetModule();
+
   // This call halts a sound if it was still playing.
   // We have to use the sound library for something to make sure
   // it is initialized.
   // If we wait until the first sound is played, there will
   // be a time lag as the library gets loaded.
-  ::PlaySound(nsnull, nsnull, SND_PURGE); 
+  theMM.PlaySound(nsnull, nsnull, SND_PURGE); 
 
   return NS_OK;
 }
@@ -165,13 +215,15 @@ NS_IMETHODIMP nsSound::PlaySystemSound(const nsAString &aSoundAlias)
 {
   PurgeLastSound();
 
+  CWinMM& theMM = CWinMM::GetModule();
+
   if (aSoundAlias.EqualsLiteral("_moz_mailbeep")) {
-    ::PlaySound("MailBeep", nsnull, SND_ALIAS | SND_ASYNC);
+    theMM.PlaySound("MailBeep", nsnull, SND_ALIAS | SND_ASYNC);
   }
   else {
     nsCAutoString nativeSoundAlias;
     NS_CopyUnicodeToNative(aSoundAlias, nativeSoundAlias);
-    ::PlaySound(nativeSoundAlias.get(), nsnull, SND_ALIAS | SND_ASYNC);
+    theMM.PlaySound(nativeSoundAlias.get(), nsnull, SND_ALIAS | SND_ASYNC);
   }
 
   return NS_OK;

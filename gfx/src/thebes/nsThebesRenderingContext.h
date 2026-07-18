@@ -223,6 +223,13 @@ public:
                                  const nsRect &aDestBounds,
                                  PRUint32 aCopyFlags);
     virtual void* GetNativeGraphicData(GraphicDataType aType);
+    NS_IMETHOD GetBackbuffer(const nsRect &aRequestedSize,
+                             const nsRect &aMaxSize,
+                             PRBool aForBlending,
+                             nsIDrawingSurface* &aBackbuffer);
+    NS_IMETHOD ReleaseBackbuffer(void);
+    NS_IMETHOD DestroyCachedBackbuffer(void);
+    NS_IMETHOD UseBackbuffer(PRBool* aUseBackbuffer);
 
     NS_IMETHOD PushTranslation(PushedTranslation* aState);
     NS_IMETHOD PopTranslation(PushedTranslation* aState);
@@ -267,7 +274,7 @@ public:
 protected:
     nsCOMPtr<nsIDeviceContext> mDeviceContext;
     // cached pixels2twips, twips2pixels values
-    double mP2A;
+    double mP2T, mT2P;
 
     nsCOMPtr<nsIWidget> mWidget;
 

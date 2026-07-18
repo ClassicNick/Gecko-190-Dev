@@ -72,10 +72,9 @@ static NS_DEFINE_CID(kRegionCID, NS_REGION_CID);
 
 //////////////////////////////////////////////////////////////////////
 
-// XXXTodo: rename FORM_TWIPS to FROM_APPUNITS
-#define FROM_TWIPS(_x)  ((gfxFloat)((_x)/(mP2A)))
-#define FROM_TWIPS_INT(_x)  (NSToIntRound((gfxFloat)((_x)/(mP2A))))
-#define TO_TWIPS(_x)    ((nscoord)((_x)*(mP2A)))
+#define FROM_TWIPS(_x)  ((gfxFloat)((_x)/(mP2T)))
+#define FROM_TWIPS_INT(_x)  (NSToIntRound((gfxFloat)((_x)/(mP2T))))
+#define TO_TWIPS(_x)    ((nscoord)((_x)*(mP2T)))
 #define GFX_RECT_FROM_TWIPS_RECT(_r)   (gfxRect(FROM_TWIPS((_r).x), FROM_TWIPS((_r).y), FROM_TWIPS((_r).width), FROM_TWIPS((_r).height)))
 
 //////////////////////////////////////////////////////////////////////
@@ -174,7 +173,8 @@ nsThebesRenderingContext::CommonInit(void)
 
     mThebes->SetLineWidth(1.0);
 
-    mP2A = mDeviceContext->AppUnitsPerDevPixel();
+    mT2P = mDeviceContext->AppUnitsToDevUnits();
+    mP2T = mDeviceContext->DevUnitsToAppUnits();
 
     return NS_OK;
 }
@@ -670,7 +670,7 @@ nsThebesRenderingContext::FillRect(const nsRect& aRect)
     gfxRect r(GFX_RECT_FROM_TWIPS_RECT(aRect));
 
     /* Clamp coordinates to work around a design bug in cairo */
-    nscoord bigval = (nscoord)(CAIRO_COORD_MAX*mP2A);
+    nscoord bigval = (nscoord)(CAIRO_COORD_MAX*mP2T);
     if (aRect.width > bigval ||
         aRect.height > bigval ||
         aRect.x < -bigval ||
@@ -870,6 +870,44 @@ nsThebesRenderingContext::DrawNativeWidgetPixmap(void* aSrcSurfaceBlack,
 }
 
 NS_IMETHODIMP
+nsThebesRenderingContext::UseBackbuffer(PRBool* aUseBackbuffer)
+{
+#ifndef XP_MACOSX
+    *aUseBackbuffer = PR_TRUE;
+#else
+    *aUseBackbuffer = PR_FALSE;
+#endif
+    return NS_OK;
+}
+
+NS_IMETHODIMP
+nsThebesRenderingContext::GetBackbuffer(const nsRect &aRequestedSize,
+                                        const nsRect &aMaxSize,
+                                        PRBool aForBlending,
+                                        nsIDrawingSurface* &aBackbuffer)
+{
+    PR_LOG(gThebesGFXLog, PR_LOG_DEBUG,
+           ("## %p nsTRC::GetBackBuffer req: %d %d %d %d max: %d %d %d %d blending? %d\n",
+            this, aRequestedSize.x, aRequestedSize.y, aRequestedSize.width, aRequestedSize.height,
+            aMaxSize.x, aMaxSize.y, aMaxSize.width, aMaxSize.height, aForBlending));
+
+    return AllocateBackbuffer(aRequestedSize, aMaxSize, aBackbuffer, PR_FALSE,
+                              aForBlending ? NS_CREATEDRAWINGSURFACE_FOR_PIXEL_ACCESS : 0);
+}
+
+NS_IMETHODIMP
+nsThebesRenderingContext::ReleaseBackbuffer(void)
+{
+    return DestroyCachedBackbuffer();
+}
+
+NS_IMETHODIMP
+nsThebesRenderingContext::DestroyCachedBackbuffer(void)
+{
+    return NS_OK;
+}
+
+NS_IMETHODIMP
 nsThebesRenderingContext::PushFilter(const nsRect& twRect, PRBool aAreaIsOpaque, float aOpacity)
 {
     PR_LOG(gThebesGFXLog, PR_LOG_DEBUG,
@@ -937,8 +975,91 @@ nsThebesRenderingContext::DrawImage(imgIContainer *aImage,
              mThebes->CurrentMatrix().GetTranslation().x, mThebes->CurrentMatrix().GetTranslation().y);
 #endif
 
-    NS_NOTREACHED("DrawImage should no longer be called with thebes");
-    return NS_ERROR_NOT_IMPLEMENTED;
+    nsCOMPtr<gfxIImageFrame> imgFrame;
+    aImage->GetCurrentFrame(getter_AddRefs(imgFrame));
+    if (!imgFrame) return NS_ERROR_FAILURE;
+
+    nsCOMPtr<nsIImage> img(do_GetInterface(imgFrame));
+    if (!img) return NS_ERROR_FAILURE;
+
+    // For Bug 87819
+    // imgFrame may want image to start at different position, so adjust
+    nsIntRect pxImgFrameRect;
+    imgFrame->GetRect(pxImgFrameRect);
+
+    // twSrcRect is always in appunits (twips),
+    // and has nothing to do with the current transform (it's a region
+    // of the image)
+    double p2a = nsIDeviceContext::AppUnitsPerCSSPixel();
+    nsIntRect pxSr;
+    pxSr.x = NSAppUnitsToIntPixels(twSrcRect.x, p2a);
+    pxSr.y = NSAppUnitsToIntPixels(twSrcRect.y, p2a);
+    pxSr.width = NSAppUnitsToIntPixels(twSrcRect.XMost(), p2a) - pxSr.x;
+    pxSr.height = NSAppUnitsToIntPixels(twSrcRect.YMost(), p2a) - pxSr.y;
+
+    // the dest rect is affected by the current transform; that'll be
+    // handled by Image::Draw(), when we actually set up the rectangle.
+    nsIntRect pxDr;
+    pxDr.x = FROM_TWIPS_INT(twDestRect.x);
+    pxDr.y = FROM_TWIPS_INT(twDestRect.y);
+    pxDr.width = FROM_TWIPS_INT(twDestRect.XMost()) - pxDr.x;
+    pxDr.height = FROM_TWIPS_INT(twDestRect.YMost()) - pxDr.y;
+
+    // If we were asked to draw a 0-width or 0-height image,
+    // as either the src or dst, just bail; we can't do anything
+    // useful with this.
+    if (pxSr.width == 0 || pxSr.height == 0 ||
+        pxDr.width == 0 || pxDr.height == 0)
+    {
+        return NS_OK;
+    }
+
+    if (pxImgFrameRect.x > 0) {
+        pxSr.x -= pxImgFrameRect.x;
+
+        nscoord scaled_x = pxSr.x;
+        if (pxDr.width != pxSr.width) {
+            PRFloat64 scale_ratio = PRFloat64(pxDr.width) / PRFloat64(pxSr.width);
+            scaled_x = NSToCoordRound(scaled_x * scale_ratio);
+        }
+
+        if (pxSr.x < 0) {
+            pxDr.x -= scaled_x;
+            pxSr.width += pxSr.x;
+            pxDr.width += scaled_x;
+            if (pxSr.width <= 0 || pxDr.width <= 0)
+                return NS_OK;
+            pxSr.x = 0;
+        } else if (pxSr.x > pxImgFrameRect.width) {
+            return NS_OK;
+        }
+    }
+
+    if (pxImgFrameRect.y > 0) {
+        pxSr.y -= pxImgFrameRect.y;
+
+        nscoord scaled_y = pxSr.y;
+        if (pxDr.height != pxSr.height) {
+            PRFloat64 scale_ratio = PRFloat64(pxDr.height) / PRFloat64(pxSr.height);
+            scaled_y = NSToCoordRound(scaled_y * scale_ratio);
+        }
+
+        if (pxSr.y < 0) {
+            pxDr.y -= scaled_y;
+            pxSr.height += pxSr.y;
+            pxDr.height += scaled_y;
+            if (pxSr.height <= 0 || pxDr.height <= 0)
+                return NS_OK;
+            pxSr.y = 0;
+        } else if (pxSr.y > pxImgFrameRect.height) {
+            return NS_OK;
+        }
+    }
+
+    return img->Draw(*this, mDrawingSurface,
+                     pxSr.x, pxSr.y,
+                     pxSr.width, pxSr.height,
+                     pxDr.x, pxDr.y, pxDr.width, pxDr.height);
 }
 
 NS_IMETHODIMP
@@ -989,7 +1110,7 @@ nsThebesRenderingContext::DrawTile(imgIContainer *aImage,
         phase.y -= imgFrameRect.y;
     }
 
-    return thebesImage->ThebesDrawTile (mThebes, mDeviceContext, phase,
+    return thebesImage->ThebesDrawTile (mThebes, phase,
                                         GFX_RECT_FROM_TWIPS_RECT(*twTargetRect),
                                         xPadding, yPadding);
 }

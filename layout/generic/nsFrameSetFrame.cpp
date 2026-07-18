@@ -221,7 +221,7 @@ nsHTMLFramesetFrame::nsHTMLFramesetFrame(nsStyleContext* aContext)
   mParentBorderWidth   = -1; // default not set
   mParentBorderColor   = NO_COLOR; // default not set
   mFirstDragPoint.x     = mFirstDragPoint.y = 0;
-  mMinDrag             = nsPresContext::CSSPixelsToAppUnits(2);
+  mMinDrag             = 0;
   mNonBorderChildCount = 0;
   mNonBlankChildCount  = 0;
   mDragger             = nsnull;
@@ -559,6 +559,7 @@ void nsHTMLFramesetFrame::CalculateRowCol(nsPresContext*       aPresContext,
     return; // NS_ERROR_OUT_OF_MEMORY
   }
 
+  float p2t = aPresContext->ScaledPixelsToTwips();
   PRInt32 i, j;
  
   // initialize the fixed, percent, relative indices, allocate the fixed sizes and zero the others
@@ -566,7 +567,7 @@ void nsHTMLFramesetFrame::CalculateRowCol(nsPresContext*       aPresContext,
     aValues[i] = 0;
     switch (aSpecs[i].mUnit) {
       case eFramesetUnit_Fixed:
-        aValues[i] = nsPresContext::CSSPixelsToAppUnits(aSpecs[i].mValue);
+        aValues[i] = NSToCoordRound(p2t * aSpecs[i].mValue);
         fixedTotal += aValues[i];
         fixed[numFixed] = i;
         numFixed++;
@@ -632,6 +633,8 @@ void nsHTMLFramesetFrame::GenerateRowCol(nsPresContext*       aPresContext,
                                          nscoord*              aValues,
                                          nsString&             aNewAttr)
 {
+  float t2p;
+  t2p = aPresContext->TwipsToPixels();
   PRInt32 i;
  
   for (i = 0; i < aNumSpecs; i++) {
@@ -640,7 +643,7 @@ void nsHTMLFramesetFrame::GenerateRowCol(nsPresContext*       aPresContext,
     
     switch (aSpecs[i].mUnit) {
       case eFramesetUnit_Fixed:
-        aNewAttr.AppendInt(nsPresContext::AppUnitsToIntCSSPixels(aValues[i]));
+        aNewAttr.AppendInt(NSToCoordRound(t2p * aValues[i]));
         break;
       case eFramesetUnit_Percent: // XXX Only accurate to 1%, need 1 pixel
       case eFramesetUnit_Relative:
@@ -663,6 +666,7 @@ PRInt32 nsHTMLFramesetFrame::GetBorderWidth(nsPresContext* aPresContext,
       return 0;
     }
   }
+  float p2t = aPresContext->ScaledPixelsToTwips();
   nsGenericHTMLElement *content = nsGenericHTMLElement::FromContent(mContent);
 
   if (content) {
@@ -679,7 +683,7 @@ PRInt32 nsHTMLFramesetFrame::GetBorderWidth(nsPresContext* aPresContext,
       if (forcing && intVal == 0) {
         intVal = DEFAULT_BORDER_WIDTH_PX;
       }
-      return nsPresContext::CSSPixelsToAppUnits(intVal);
+      return NSIntPixelsToTwips(intVal, p2t);
     }
   }
 
@@ -688,7 +692,7 @@ PRInt32 nsHTMLFramesetFrame::GetBorderWidth(nsPresContext* aPresContext,
     return mParentBorderWidth;
   }
 
-  return nsPresContext::CSSPixelsToAppUnits(DEFAULT_BORDER_WIDTH_PX);
+  return NSIntPixelsToTwips(DEFAULT_BORDER_WIDTH_PX, p2t);
 }
 
 
@@ -1474,6 +1478,12 @@ nsHTMLFramesetFrame::StartMouseDrag(nsPresContext*            aPresContext,
                                     nsHTMLFramesetBorderFrame* aBorder, 
                                     nsGUIEvent*                aEvent)
 {
+  if (mMinDrag == 0) {
+    float p2t;
+    p2t = aPresContext->PixelsToTwips();
+    mMinDrag = NSIntPixelsToTwips(2, p2t);  // set min drag and min frame size to 2 pixels
+  }
+
 #if 0
   PRInt32 index;
   IndexOf(aBorder, index);
@@ -1512,9 +1522,10 @@ nsHTMLFramesetFrame::MouseDrag(nsPresContext* aPresContext,
                                nsGUIEvent*     aEvent)
 {
   PRInt32 change; // measured positive from left-to-right or top-to-bottom
+  float p2t = aPresContext->PixelsToTwips();
   nsWeakFrame weakFrame(this);
   if (mDragger->mVertical) {
-    change = aPresContext->DevPixelsToAppUnits(aEvent->refPoint.x - mFirstDragPoint.x);
+    change = NSIntPixelsToTwips(aEvent->refPoint.x - mFirstDragPoint.x, p2t);
     if (change > mNextNeighborOrigSize - mMinDrag) {
       change = mNextNeighborOrigSize - mMinDrag;
     } else if (change <= mMinDrag - mPrevNeighborOrigSize) {
@@ -1537,7 +1548,7 @@ nsHTMLFramesetFrame::MouseDrag(nsPresContext* aPresContext,
       mContent->SetAttr(kNameSpaceID_None, nsGkAtoms::cols, newColAttr, PR_TRUE);
     }
   } else {
-    change = aPresContext->DevPixelsToAppUnits(aEvent->refPoint.y - mFirstDragPoint.y);
+    change = NSIntPixelsToTwips(aEvent->refPoint.y - mFirstDragPoint.y, p2t);
     if (change > mNextNeighborOrigSize - mMinDrag) {
       change = mNextNeighborOrigSize - mMinDrag;
     } else if (change <= mMinDrag - mPrevNeighborOrigSize) {
@@ -1720,8 +1731,13 @@ void nsHTMLFramesetBorderFrame::PaintBorder(nsIRenderingContext& aRenderingConte
     }
   }
 
-  nscoord widthInPixels = nsPresContext::AppUnitsToIntCSSPixels(mWidth);
-  nscoord pixelWidth    = nsPresContext::CSSPixelsToAppUnits(1);
+  nsPresContext* presContext = PresContext();
+  float t2p;
+  t2p = presContext->TwipsToPixels();
+  nscoord widthInPixels = NSTwipsToIntPixels(mWidth, t2p);
+  float p2t;
+  p2t = presContext->PixelsToTwips();
+  nscoord pixelWidth    = NSIntPixelsToTwips(1, p2t);
 
   if (widthInPixels <= 0)
     return;

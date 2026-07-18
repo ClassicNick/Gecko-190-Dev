@@ -82,7 +82,7 @@ CPPSRCS		= \
 
 EXPORTS	= nsIRenderingContextWin.h nsIDrawingSurfaceWin.h
 
-EXTRA_DSO_LIBS	= gkgfx mozutil_s gfxshared_s
+EXTRA_DSO_LIBS	= gkgfx
 
 LOCAL_INCLUDES	= \
 		-I$(srcdir)/. \
@@ -98,6 +98,8 @@ OS_LIBS		+= $(call EXPAND_LIBNAME,$(_OS_LIBS))
 EXTRA_DSO_LDOPTS += \
 		$(LIBS_DIR) \
 		$(EXTRA_DSO_LIBS) \
+		$(DEPTH)/modules/libutil/src/$(LIB_PREFIX)mozutil_s.$(LIB_SUFFIX) \
+        $(DEPTH)/gfx/src/shared/$(LIB_PREFIX)gfxshared_s.$(LIB_SUFFIX) \
 		$(MOZ_UNICHARUTIL_LIBS) \
 		$(MOZ_COMPONENT_LIBS) \
 		$(MOZ_JS_LIBS) \

@@ -82,9 +82,7 @@ nsScrollPortView::nsScrollPortView(nsViewManager* aViewManager)
 {
   mOffsetX = mOffsetY = 0;
   mOffsetXpx = mOffsetYpx = 0;
-  nsCOMPtr<nsIDeviceContext> dev;
-  mViewManager->GetDeviceContext(*getter_AddRefs(dev));
-  mLineHeight = dev->AppUnitsPerInch() / 6; // 12 pt
+  mLineHeight = NSIntPointsToTwips(12);
 
   mListeners = nsnull;
   mSmoothScroll = nsnull;
@@ -187,13 +185,13 @@ NS_IMETHODIMP nsScrollPortView::GetContainerSize(nscoord *aWidth, nscoord *aHeig
 }
 
 static void ComputeVelocities(PRInt32 aCurVelocity, nscoord aCurPos, nscoord aDstPos,
-                              PRInt32* aVelocities, PRInt32 aP2A) {
+                              PRInt32* aVelocities, float aT2P, float aP2T) {
   // scrolling always works in units of whole pixels. So compute velocities
   // in pixels and then scale them up. This ensures, for example, that
   // a 1-pixel scroll isn't broken into N frames of 1/N pixels each, each
   // frame increment being rounded to 0 whole pixels.
-  aCurPos = NSAppUnitsToIntPixels(aCurPos, aP2A);
-  aDstPos = NSAppUnitsToIntPixels(aDstPos, aP2A);
+  aCurPos = NSTwipsToIntPixels(aCurPos, aT2P);
+  aDstPos = NSTwipsToIntPixels(aDstPos, aT2P);
 
   PRInt32 i;
   PRInt32 direction = (aCurPos < aDstPos ? 1 : -1);
@@ -212,7 +210,7 @@ static void ComputeVelocities(PRInt32 aCurVelocity, nscoord aCurPos, nscoord aDs
   }
   NS_ASSERTION(total == absDelta, "Invalid velocity sum");
 
-  PRInt32 scale = NSIntPixelsToAppUnits(direction, aP2A);
+  PRInt32 scale = direction*((PRInt32)aP2T);
   for (i = 0; i < SMOOTH_SCROLL_FRAMES; i++) {
     aVelocities[i*2] *= scale;
   }
@@ -313,21 +311,23 @@ NS_IMETHODIMP nsScrollPortView::ScrollTo(nscoord aDestinationX, nscoord aDestina
 
   nsCOMPtr<nsIDeviceContext> dev;
   mViewManager->GetDeviceContext(*getter_AddRefs(dev));
-  PRInt32 p2a = dev->AppUnitsPerDevPixel();
+  float p2t, t2p;
+  p2t = dev->DevUnitsToAppUnits(); 
+  t2p = dev->AppUnitsToDevUnits();
 
   // compute velocity vectors
   ComputeVelocities(currentVelocityX, mOffsetX,
                     mSmoothScroll->mDestinationX, mSmoothScroll->mVelocities,
-                    p2a);
+                    t2p, p2t);
   ComputeVelocities(currentVelocityY, mOffsetY,
                     mSmoothScroll->mDestinationY, mSmoothScroll->mVelocities + 1,
-                    p2a);
+                    t2p, p2t);
 
   return NS_OK;
 }
 
 static void AdjustChildWidgets(nsView *aView,
-  nsPoint aWidgetToParentViewOrigin, PRInt32 aP2A, PRBool aInvalidate)
+  nsPoint aWidgetToParentViewOrigin, float aScale, PRBool aInvalidate)
 {
   if (aView->HasWidget()) {
     nsIWidget* widget = aView->GetWidget();
@@ -337,8 +337,8 @@ static void AdjustChildWidgets(nsView *aView,
       nsRect bounds = aView->GetBounds();
       nsPoint widgetOrigin = aWidgetToParentViewOrigin
         + nsPoint(bounds.x, bounds.y);
-      widget->Move(NSAppUnitsToIntPixels(widgetOrigin.x, aP2A),
-                   NSAppUnitsToIntPixels(widgetOrigin.y, aP2A));
+      widget->Move(NSTwipsToIntPixels(widgetOrigin.x, aScale),
+                   NSTwipsToIntPixels(widgetOrigin.y, aScale));
       if (aInvalidate) {
         // Force the widget and everything in it to repaint. We can't
         // just use Invalidate because the widget might have child
@@ -351,14 +351,14 @@ static void AdjustChildWidgets(nsView *aView,
       }
     }
   } else {
-    // Don't recurse if the view haLs a widget, because we adjusted the view's
+    // Don't recurse if the view has a widget, because we adjusted the view's
     // widget position, and its child widgets are relative to its positon
     nsPoint widgetToViewOrigin = aWidgetToParentViewOrigin
       + aView->GetPosition();
 
     for (nsView* kid = aView->GetFirstChild(); kid; kid = kid->GetNextSibling())
     {
-      AdjustChildWidgets(kid, widgetToViewOrigin, aP2A, aInvalidate);
+      AdjustChildWidgets(kid, widgetToViewOrigin, aScale, aInvalidate);
     }
   }
 }
@@ -471,10 +471,10 @@ NS_IMETHODIMP nsScrollPortView::ScrollByPixels(PRInt32 aNumPixelsX,
 {
   nsCOMPtr<nsIDeviceContext> dev;
   mViewManager->GetDeviceContext(*getter_AddRefs(dev));
-  PRInt32 p2a = dev->AppUnitsPerDevPixel(); 
+  float p2t = dev->DevUnitsToAppUnits(); 
 
-  nscoord dx = NSIntPixelsToAppUnits(aNumPixelsX, p2a);
-  nscoord dy = NSIntPixelsToAppUnits(aNumPixelsY, p2a);
+  nscoord dx = NSIntPixelsToTwips(aNumPixelsX, p2t);
+  nscoord dy = NSIntPixelsToTwips(aNumPixelsY, p2t);
 
   return ScrollTo(mOffsetX + dx, mOffsetY + dy, 0);
 }
@@ -505,19 +505,21 @@ NS_IMETHODIMP nsScrollPortView::CanScroll(PRBool aHorizontal,
 
   nsCOMPtr<nsIDeviceContext> dev;
   mViewManager->GetDeviceContext(*getter_AddRefs(dev));
-  PRInt32 p2a = dev->AppUnitsPerDevPixel();
+  float t2p, p2t;
+  t2p = dev->AppUnitsToDevUnits();
+  p2t = dev->DevUnitsToAppUnits();
 
   nscoord max;
   if (aHorizontal) {
     max = scrolledRect.XMost() - portSize.width;
     // Round by pixel
-    nscoord maxPx = NSAppUnitsToIntPixels(max, p2a);
-    max = NSIntPixelsToAppUnits(maxPx, p2a);
+    nscoord maxPx = NSTwipsToIntPixels(max, t2p);
+    max = NSIntPixelsToTwips(maxPx, p2t);
   } else {
     max = scrolledRect.YMost() - portSize.height;
     // Round by pixel
-    nscoord maxPx = NSAppUnitsToIntPixels(max, p2a);
-    max = NSIntPixelsToAppUnits(maxPx, p2a);
+    nscoord maxPx = NSTwipsToIntPixels(max, t2p);
+    max = NSIntPixelsToTwips(maxPx, p2t);
   }
 
   // Can scroll to Bottom or to Right?
@@ -527,7 +529,7 @@ NS_IMETHODIMP nsScrollPortView::CanScroll(PRBool aHorizontal,
 }
 
 void nsScrollPortView::Scroll(nsView *aScrolledView, nsPoint aTwipsDelta, nsPoint aPixDelta,
-                              PRInt32 aP2A)
+                              float aT2P)
 {
   if (aTwipsDelta.x != 0 || aTwipsDelta.y != 0)
   {
@@ -561,7 +563,7 @@ void nsScrollPortView::Scroll(nsView *aScrolledView, nsPoint aTwipsDelta, nsPoin
       // may include area that's not supposed to be scrolled. We need
       // to invalidate to ensure that any such area is properly
       // repainted back to the right rendering.
-      AdjustChildWidgets(aScrolledView, offsetToWidget, aP2A, PR_TRUE);
+      AdjustChildWidgets(aScrolledView, offsetToWidget, aT2P, PR_TRUE);
       // If we don't have a scroll widget then we must just update.
       // We should call this after fixing up the widget positions to be
       // consistent with the view hierarchy.
@@ -573,7 +575,7 @@ void nsScrollPortView::Scroll(nsView *aScrolledView, nsPoint aTwipsDelta, nsPoin
       nsRect bounds(GetBounds());
       nsPoint topLeft(bounds.x, bounds.y);
       AdjustChildWidgets(aScrolledView,
-                         GetPosition() - topLeft, aP2A, PR_FALSE);
+                         GetPosition() - topLeft, aT2P, PR_FALSE);
       // We should call this after fixing up the widget positions to be
       // consistent with the view hierarchy.
       mViewManager->UpdateView(this, 0);
@@ -593,7 +595,9 @@ NS_IMETHODIMP nsScrollPortView::ScrollToImpl(nscoord aX, nscoord aY, PRUint32 aU
   // convert to pixels
   nsCOMPtr<nsIDeviceContext> dev;
   mViewManager->GetDeviceContext(*getter_AddRefs(dev));
-  PRInt32 p2a = dev->AppUnitsPerDevPixel();
+  float t2p, p2t;
+  t2p = dev->AppUnitsToDevUnits();
+  p2t = dev->DevUnitsToAppUnits();
 
   // Update the scrolled view's position
   nsresult rv = ClampScrollValues(aX, aY, this);
@@ -602,11 +606,11 @@ NS_IMETHODIMP nsScrollPortView::ScrollToImpl(nscoord aX, nscoord aY, PRUint32 aU
   }
   
   // convert aX and aY in pixels
-  nscoord aXpx = NSAppUnitsToIntPixels(aX, p2a);
-  nscoord aYpx = NSAppUnitsToIntPixels(aY, p2a);
+  nscoord aXpx = NSTwipsToIntPixels(aX, t2p);
+  nscoord aYpx = NSTwipsToIntPixels(aY, t2p);
   
-  aX = NSIntPixelsToAppUnits(aXpx, p2a);
-  aY = NSIntPixelsToAppUnits(aYpx, p2a);
+  aX = NSIntPixelsToTwips(aXpx,p2t);
+  aY = NSIntPixelsToTwips(aYpx,p2t);
   
   // do nothing if the we aren't scrolling.
   // this needs to be rechecked because of the clamping and
@@ -652,8 +656,8 @@ NS_IMETHODIMP nsScrollPortView::ScrollToImpl(nscoord aX, nscoord aY, PRUint32 aU
   // store the new position
   mOffsetX = aX;
   mOffsetY = aY;
-
-  Scroll(scrolledView, twipsDelta, nsPoint(dxPx, dyPx), p2a);
+  
+  Scroll(scrolledView, twipsDelta, nsPoint(dxPx, dyPx), t2p);
 
   mViewManager->SynthesizeMouseMove(PR_TRUE);
   

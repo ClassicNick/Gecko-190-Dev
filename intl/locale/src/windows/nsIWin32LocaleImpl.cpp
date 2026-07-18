@@ -156,6 +156,15 @@ struct iso_map
 #ifndef SUBLANG_ENGLISH_PHILIPPINES
 #define SUBLANG_ENGLISH_PHILIPPINES         0x0d
 #endif
+#ifndef LANG_GUJARATI
+#define LANG_GUJARATI                    0x47
+#endif
+#ifndef SUBLANG_URDU_PAKISTAN
+#define SUBLANG_URDU_PAKISTAN            0x01    // Urdu (Pakistan)
+#endif
+#ifndef SUBLANG_URDU_INDIA
+#define SUBLANG_URDU_INDIA               0x02    // Urdu (India)
+#endif
 
 
 // Turn this on when ParseLocaleString(), GetXPLocale(), and 

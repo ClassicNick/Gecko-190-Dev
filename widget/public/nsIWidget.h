@@ -52,7 +52,9 @@
 class   nsIAppShell;
 class   nsIToolkit;
 class   nsIFontMetrics;
+class   nsIToolkit;
 class   nsIRenderingContext;
+class   nsIEnumerator;
 class   nsIDeviceContext;
 class   nsIRegion;
 struct  nsRect;

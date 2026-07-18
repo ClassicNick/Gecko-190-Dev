@@ -260,7 +260,7 @@ nsMathMLmoverFrame::Place(nsIRenderingContext& aRenderingContext,
                                                aRenderingContext,
                                                aPlaceOrigin,
                                                aDesiredSize,
-                                               this, 0, PresContext()->PointsToAppUnits(0.5f));
+                                               this);
   }
 
   ////////////////////////////////////
@@ -281,7 +281,7 @@ nsMathMLmoverFrame::Place(nsIRenderingContext& aRenderingContext,
   GetReflowAndBoundingMetricsFor(baseFrame, baseSize, bmBase);
   GetReflowAndBoundingMetricsFor(overFrame, overSize, bmOver);
 
-  nscoord onePixel = nsPresContext::CSSPixelsToAppUnits(1);
+  nscoord onePixel = PresContext()->IntScaledPixelsToTwips(1);
 
   ////////////////////
   // Place Children

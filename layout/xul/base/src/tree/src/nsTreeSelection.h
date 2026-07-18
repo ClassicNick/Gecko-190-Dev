@@ -45,6 +45,7 @@
 #include "nsITreeSelection.h"
 #include "nsITreeColumns.h"
 #include "nsITimer.h"
+#include "nsIFrame.h"
 
 class nsITreeBoxObject;
 struct nsTreeRange;

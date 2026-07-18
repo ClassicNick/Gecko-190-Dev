@@ -53,6 +53,7 @@
 #include "nsIPrefBranch.h"
 #include "nsICookiePermission.h"
 #include "nsIPermissionManager.h"
+#include "nsIFrame.h"
 
 static const PRUint32 ASK_BEFORE_ACCEPT = 1;
 static const PRUint32 ACCEPT_SESSION = 2;

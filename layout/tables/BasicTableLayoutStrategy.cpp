@@ -41,6 +41,7 @@
  * used for CSS2's 'table-layout: auto'.
  */
 
+#include "nsCOMPtr.h"
 #include "BasicTableLayoutStrategy.h"
 #include "nsTableFrame.h"
 #include "nsTableCellFrame.h"
@@ -221,6 +222,8 @@ void
 BasicTableLayoutStrategy::ComputeColumnIntrinsicWidths(nsIRenderingContext* aRenderingContext)
 {
     nsTableFrame *tableFrame = mTableFrame;
+    nsPresContext *presContext = tableFrame->PresContext();
+    float p2t = presContext->ScaledPixelsToTwips();
     nsTableCellMap *cellMap = tableFrame->GetCellMap();
 
     nscoord spacing = tableFrame->GetCellSpacingX();
@@ -651,12 +654,14 @@ BasicTableLayoutStrategy::ComputeColumnWidths(const nsHTMLReflowState& aReflowSt
         return; // nothing to do
 
     nscoord spacing = mTableFrame->GetCellSpacingX();
+    float p2t = mTableFrame->PresContext()->ScaledPixelsToTwips();
 
     nscoord min = mMinWidth;
 
     // border-spacing isn't part of the basis for percentages.
     nscoord subtract = spacing;
-    for (PRInt32 col = 0; col < colCount; ++col) {
+	PRInt32 col;
+    for (col = 0; col < colCount; ++col) {
         if (mTableFrame->GetNumCellsOriginatingInCol(col)) {
             subtract += spacing;
         }
@@ -718,7 +723,6 @@ BasicTableLayoutStrategy::ComputeColumnWidths(const nsHTMLReflowState& aReflowSt
             total_fixed_pref = 0;
     float total_pct = 0.0f; // 0.0f to 1.0f
 
-    PRInt32 col;
     for (col = 0; col < colCount; ++col) {
         nsTableColFrame *colFrame = mTableFrame->GetColFrame(col);
         if (!colFrame) {

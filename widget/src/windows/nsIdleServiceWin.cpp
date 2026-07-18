@@ -46,6 +46,7 @@ NS_IMPL_ISUPPORTS1(nsIdleServiceWin, nsIIdleService)
 NS_IMETHODIMP
 nsIdleServiceWin::GetIdleTime(PRUint32 *aTimeDiff)
 {
+#if WINVER >= 0x0500
     LASTINPUTINFO inputInfo;
     inputInfo.cbSize = sizeof(inputInfo);
     if (!::GetLastInputInfo(&inputInfo))
@@ -53,4 +54,7 @@ nsIdleServiceWin::GetIdleTime(PRUint32 *aTimeDiff)
 
     *aTimeDiff = GetTickCount() - inputInfo.dwTime;
     return NS_OK;
+#else
+	return NS_ERROR_NOT_IMPLEMENTED;
+#endif
 }
