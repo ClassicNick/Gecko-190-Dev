@@ -35,6 +35,7 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
+#include "nsCOMPtr.h"
 #include "nsScriptElement.h"
 #include "nsIContent.h"
 #include "nsIPresShell.h"
