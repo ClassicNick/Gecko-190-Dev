@@ -715,6 +715,8 @@ nsIBox::AddCSSPrefSize(nsBoxLayoutState& aState, nsIBox* aBox, nsSize& aSize)
     // For example, we might be magic XUL frames whose primary content is an HTML
     // <select>
     if (content && content->IsNodeOfType(nsINode::eXUL)) {
+		nsPresContext* presContext = aState.PresContext();
+
         nsAutoString value;
         PRInt32 error;
 
@@ -809,6 +811,8 @@ nsIBox::AddCSSMinSize(nsBoxLayoutState& aState, nsIBox* aBox, nsSize& aSize)
 
     nsIContent* content = aBox->GetContent();
     if (content) {
+		nsPresContext* presContext = aState.PresContext();
+
         nsAutoString value;
         PRInt32 error;
 
@@ -871,6 +875,8 @@ nsIBox::AddCSSMaxSize(nsBoxLayoutState& aState, nsIBox* aBox, nsSize& aSize)
 
     nsIContent* content = aBox->GetContent();
     if (content) {
+		nsPresContext* presContext = aState.PresContext();
+
         nsAutoString value;
         PRInt32 error;
 

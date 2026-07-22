@@ -42,8 +42,8 @@
 
 /* A namespace class for static layout utilities. */
 
-#include "nsJSUtils.h"
 #include "nsCOMPtr.h"
+#include "nsJSUtils.h"
 #include "nsAString.h"
 #include "nsPrintfCString.h"
 #include "nsUnicharUtils.h"

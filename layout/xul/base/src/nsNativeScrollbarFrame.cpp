@@ -260,13 +260,14 @@ nsNativeScrollbarFrame::GetPrefSize(nsBoxLayoutState& aState)
 
   PRInt32 narrowDimension = 0;
   nsCOMPtr<nsINativeScrollbar> native ( do_QueryInterface(mScrollbar) );
+  float p2t = aState.PresContext()->PixelsToTwips();
   if ( !native ) return size;
   native->GetNarrowSize(&narrowDimension);
 
   if ( IsVertical() )
-    size.width = aState.PresContext()->DevPixelsToAppUnits(narrowDimension);
+    size.width = NSIntPixelsToTwips(narrowDimension, p2t);
   else
-    size.height = aState.PresContext()->DevPixelsToAppUnits(narrowDimension);
+    size.height = NSIntPixelsToTwips(narrowDimension, p2t);
 
   // By now, we have both the content node for the scrollbar and the associated
   // scrollbar mediator (for outliner, if applicable). Hook up the scrollbar to
