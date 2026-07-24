@@ -165,8 +165,6 @@ nsPrintOptions::GetDefaultFont(nsFont &aFont)
   return NS_OK;
 }
 
-=======
->>>>>>> bc93bea... Bug 377096 - Factor out nsIPrintOptions::AvailablePrinters. r=pavlov, sr=biesi.
 NS_IMETHODIMP
 nsPrintOptions::ShowPrintSetupDialog(nsIPrintSettings *aPS)
 {
